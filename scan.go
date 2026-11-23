@@ -19,7 +19,7 @@ import (
 // FileInfo describes one spec artifact below the served root.
 type FileInfo struct {
 	Path  string `json:"path"`  // slash separated, relative to root
-	Kind  string `json:"kind"`  // markdown | plantuml | mermaid | openapi | data
+	Kind  string `json:"kind"`  // markdown | plantuml | mermaid | csv | openapi | data
 	Size  int64  `json:"size"`  // bytes
 	Mtime string `json:"mtime"` // UnixNano as string (exceeds JS safe integer range)
 }
@@ -45,6 +45,8 @@ func kindByExt(name string) string {
 		return "plantuml"
 	case ".mmd", ".mermaid":
 		return "mermaid"
+	case ".csv", ".tsv":
+		return "csv"
 	case ".yaml", ".yml", ".json":
 		return "data"
 	}

@@ -105,6 +105,8 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .md pre code { background: none; padding: 0; }
 .md table { border-collapse: collapse; }
 .md th, .md td { border: 1px solid var(--border); padding: 4px 10px; }
+.md.csv { max-width: none; overflow: auto; }
+.md.csv th { text-align: left; position: sticky; top: 0; background: var(--code-bg); }
 .md blockquote { margin-left: 0; padding-left: 1em; border-left: 3px solid var(--accent); color: var(--muted); }
 .md a { color: var(--accent); text-decoration: none; }
 .md a:hover { text-decoration: underline; }

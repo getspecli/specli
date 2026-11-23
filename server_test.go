@@ -97,6 +97,7 @@ func TestScanKindsAndVisibility(t *testing.T) {
 	write(t, root, "a.md", "# a")
 	write(t, root, "d/b.puml", "@startuml\n@enduml")
 	write(t, root, "c.mmd", "flowchart TD\nA-->B")
+	write(t, root, "roles.csv", "role,desc\nadmin,all")
 	write(t, root, "api.yaml", "openapi: 3.0.3\ninfo: {}\n")
 	write(t, root, "swag.json", `{"swagger": "2.0"}`)
 	write(t, root, "other.yaml", "services:\n  web: {}\n")
@@ -114,7 +115,7 @@ func TestScanKindsAndVisibility(t *testing.T) {
 		got[f.Path] = f.Kind
 	}
 	want := map[string]string{
-		"a.md": "markdown", "d/b.puml": "plantuml", "c.mmd": "mermaid",
+		"a.md": "markdown", "d/b.puml": "plantuml", "c.mmd": "mermaid", "roles.csv": "csv",
 		"api.yaml": "openapi", "swag.json": "openapi",
 	}
 	if !reflect.DeepEqual(got, want) {

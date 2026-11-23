@@ -10,6 +10,7 @@ One self-contained binary (frontend embedded), no runtime needed.
 | Markdown (`.md`) | rendered, with inline ```` ```plantuml ```` / ```` ```mermaid ```` blocks, `![](x.puml)` / `![](x.mmd)` embeds, links between spec files | CodeMirror |
 | PlantUML (`.puml`, `.plantuml`, `.pu`, `.iuml`, `.wsd`) | SVG, live | CodeMirror |
 | Mermaid (`.mmd`, `.mermaid`) | SVG, live, syntax errors shown | CodeMirror |
+| CSV / TSV (`.csv`, `.tsv`) | table (delimiter auto-detected) | CodeMirror |
 | OpenAPI / Swagger (`.yaml`, `.yml`, `.json`) | Swagger UI (try-it-out disabled), live, parse errors shown | CodeMirror |
 
 Search: type in the sidebar box (`Ctrl/Cmd+K`) to filter file names and search all text; clicking a hit opens the file

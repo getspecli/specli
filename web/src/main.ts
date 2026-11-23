@@ -10,11 +10,12 @@ import { oneDark } from '@codemirror/theme-one-dark';
 import { Marked, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import { load as loadYaml } from 'js-yaml';
+import { detectDelimiter, parseCsv } from './csv';
 import { renderMermaid, renderPlantumlInBrowser, type DiagramResult } from './diagrams';
 
 // ---------- types & state ----------
 
-type Kind = 'markdown' | 'plantuml' | 'mermaid' | 'openapi' | 'data';
+type Kind = 'markdown' | 'plantuml' | 'mermaid' | 'csv' | 'openapi' | 'data';
 type Mode = 'edit' | 'split' | 'preview';
 
 interface FileInfo { path: string; kind: Kind; size: number; mtime: string }
@@ -381,6 +382,35 @@ async function renderOpenApi(text: string, path: string, seq: number) {
   swaggerFor = path;
 }
 
+// ---------- CSV ----------
+
+const MAX_CSV_ROWS = 5000;
+
+function renderCsv(text: string, path: string) {
+  const rows = parseCsv(text, detectDelimiter(text, path));
+  const box = document.createElement('div');
+  box.className = 'md csv';
+  if (!rows.length) {
+    box.textContent = 'Empty file';
+  } else {
+    const [head, ...body] = rows;
+    const table = document.createElement('table');
+    const tr = table.createTHead().insertRow();
+    for (const h of head) tr.append(Object.assign(document.createElement('th'), { textContent: h }));
+    const tb = table.createTBody();
+    for (const r of body.slice(0, MAX_CSV_ROWS)) {
+      const row = tb.insertRow();
+      for (const c of r) row.insertCell().textContent = c;
+    }
+    box.append(table);
+    if (body.length > MAX_CSV_ROWS) {
+      box.append(Object.assign(document.createElement('p'), { textContent: `Showing first ${MAX_CSV_ROWS} of ${body.length} rows.` }));
+    }
+  }
+  els.pvBody.className = '';
+  els.pvBody.replaceChildren(box);
+}
+
 // ---------- preview dispatch ----------
 
 async function renderPreview() {
@@ -398,6 +428,8 @@ async function renderPreview() {
     box.textContent = 'Rendering…';
     els.pvBody.replaceChildren(box);
     await fillDiagram(box, kind, text, seq);
+  } else if (kind === 'csv') {
+    renderCsv(text, path);
   } else if (kind === 'openapi') {
     await renderOpenApi(text, path, seq);
   }
@@ -406,7 +438,7 @@ const schedulePreview = debounce(() => void renderPreview(), 350);
 
 // ---------- file tree ----------
 
-const kindBadge: Record<Kind, string> = { markdown: 'MD', plantuml: 'UML', mermaid: 'MMD', openapi: 'API', data: 'DAT' };
+const kindBadge: Record<Kind, string> = { markdown: 'MD', plantuml: 'UML', mermaid: 'MMD', csv: 'CSV', openapi: 'API', data: 'DAT' };
 
 interface TreeNode { name: string; path: string; dirs: Map<string, TreeNode>; files: FileInfo[] }
 
@@ -581,7 +613,7 @@ function renderTree() {
     if (!names.length && !hitsQuery && !searching) els.tree.append('No matches.');
   } else {
     renderNode(buildTree(files), els.tree);
-    if (!files.length) els.tree.textContent = 'No Markdown, PlantUML, Mermaid or OpenAPI files found.';
+    if (!files.length) els.tree.textContent = 'No Markdown, PlantUML, Mermaid, CSV or OpenAPI files found.';
   }
 }
 
@@ -659,9 +691,10 @@ els.newBtn.addEventListener('click', async () => {
   if (ext === '.md' || ext === '.markdown') content = '# Title\n\n';
   else if (isPuml(path)) content = '@startuml\n\n@enduml\n';
   else if (isMermaid(path)) content = 'flowchart TD\n  A[Start] --> B[End]\n';
+  else if (ext === '.csv' || ext === '.tsv') content = ext === '.csv' ? 'name,description\n' : 'name\tdescription\n';
   else if (ext === '.yaml' || ext === '.yml') content = 'openapi: 3.0.3\ninfo:\n  title: New API\n  version: 0.1.0\npaths: {}\n';
   else if (ext === '.json') content = '{\n  "openapi": "3.0.3",\n  "info": { "title": "New API", "version": "0.1.0" },\n  "paths": {}\n}\n';
-  else { alert('Unsupported file type. Use .md, .puml, .mmd, .yaml/.yml or .json'); return; }
+  else { alert('Unsupported file type. Use .md, .puml, .mmd, .csv, .yaml/.yml or .json'); return; }
   const r = await api<{ error?: string }>('/api/file?path=' + enc(path), {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ content, baseMtime: '', eol: 'lf' }),
