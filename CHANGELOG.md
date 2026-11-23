@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.2
+- Markdown front matter is rendered as a key/value table.
+
 ## 0.3.1
 - CSV/TSV files are listed and rendered as tables.
 

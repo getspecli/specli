@@ -21,7 +21,7 @@ const previewText = (page: Page) => page.locator('#pv-body').evaluate((e) => (e.
 test('lists files and renders Markdown with PlantUML and Mermaid', async ({ page }) => {
   await page.goto('/#/README.md');
   await expect(page.locator('.md h1')).toHaveText('Order Service – Design');
-  await expect(page.locator('#tree a.file')).toHaveCount(5);
+  await expect(page.locator('#tree a.file')).toHaveCount(7);
 
   // 2 PlantUML (embedded file + inline) and 4 Mermaid blocks
   const svgs = page.locator('.md .uml-page svg');
@@ -105,4 +105,14 @@ test('creates a file, saves it and survives a reload', async ({ page, request })
 
   await page.reload();
   await expect(page.locator('.md')).toContainText('Saved by the e2e test');
+});
+
+test('renders front matter and csv as tables', async ({ page }) => {
+  await page.goto('/#/frontmatter.md');
+  await expect(page.locator('.md h1')).toHaveText('Roles');
+  await expect(page.locator('.md table.frontmatter tr')).toHaveCount(3);
+  await expect(page.locator('.md table.frontmatter')).toContainText('auth, rbac');
+  await page.goto('/#/roles.csv');
+  await expect(page.locator('.md.csv tbody tr')).toHaveCount(2);
+  await expect(page.locator('.md.csv')).toContainText('Read-only, no export');
 });

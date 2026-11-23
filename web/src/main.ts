@@ -263,8 +263,39 @@ const marked = new Marked({
   },
 });
 
+// Leading YAML front matter ("---" ... "---") is shown as a key/value table.
+const FRONTMATTER_RE = /^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/;
+
+function fmValue(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v) && v.every((x) => x === null || typeof x !== 'object')) return v.map(String).join(', ');
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return typeof v === 'object' ? JSON.stringify(v) : String(v);
+}
+
+function frontMatterEl(src: string): HTMLElement {
+  let data: unknown;
+  try { data = loadYaml(src); } catch { data = undefined; }
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    const table = document.createElement('table');
+    table.className = 'frontmatter';
+    for (const [k, v] of Object.entries(data)) {
+      const tr = table.insertRow();
+      tr.append(Object.assign(document.createElement('th'), { textContent: k }));
+      tr.insertCell().textContent = fmValue(v);
+    }
+    return table;
+  }
+  const pre = document.createElement('pre');
+  pre.className = 'frontmatter';
+  pre.textContent = src;
+  return pre;
+}
+
 function renderMarkdown(text: string, docPath: string, seq: number) {
   umlBlocks = [];
+  const fm = FRONTMATTER_RE.exec(text);
+  if (fm) text = text.slice(fm[0].length);
   const html = DOMPurify.sanitize(marked.parse(text, { async: false }) as string);
   const blocks = umlBlocks;
   const known = new Set(files.map((f) => f.path));
@@ -302,6 +333,7 @@ function renderMarkdown(text: string, docPath: string, seq: number) {
       img.setAttribute('src', '/api/asset?path=' + enc(target));
     }
   }
+  if (fm) box.append(frontMatterEl(fm[1]));
   box.append(frag);
   els.pvBody.className = '';
   els.pvBody.replaceChildren(box);
