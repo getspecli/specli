@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 - `specli --self-update` installs the latest release (checksum-verified).
 - The UI footer shows the version and a notice when a newer release is available (`--no-update-check` to disable).
 - New logo (favicon, sidebar, empty state) and a redesigned, darker footer.
