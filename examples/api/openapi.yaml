@@ -1,0 +1,26 @@
+openapi: 3.0.3
+info:
+  title: Order Service
+  version: 0.1.0
+paths:
+  /orders:
+    post:
+      summary: Create an order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Order'
+      responses:
+        '201':
+          description: Created
+components:
+  schemas:
+    Order:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { type: string }

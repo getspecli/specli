@@ -1,0 +1,108 @@
+import { expect, test, type Page } from '@playwright/test';
+
+// Any console error or warning (CSP violations, failed requests, exceptions)
+// fails the test, so regressions in the security policy are caught here.
+let problems: string[] = [];
+
+test.beforeEach(async ({ page }) => {
+  problems = [];
+  page.on('console', (m) => {
+    if (m.type() === 'error' || m.type() === 'warning') problems.push(`${m.type()}: ${m.text()}`);
+  });
+  page.on('pageerror', (e) => problems.push(`pageerror: ${e.message}`));
+});
+
+test.afterEach(() => {
+  expect(problems, 'browser console must stay clean').toEqual([]);
+});
+
+const previewText = (page: Page) => page.locator('#pv-body').evaluate((e) => (e.textContent ?? '').replace(/\s+/g, ' '));
+
+test('lists files and renders Markdown with PlantUML and Mermaid', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('.md h1')).toHaveText('Order Service – Design');
+  await expect(page.locator('#tree a.file')).toHaveCount(5);
+
+  // 2 PlantUML (embedded file + inline) and 4 Mermaid blocks
+  const svgs = page.locator('.md .uml-page svg');
+  await expect(svgs).toHaveCount(6);
+  const all = (await svgs.evaluateAll((els) => els.map((e) => e.textContent ?? ''))).join(' ');
+  expect(all).toContain('OrderService'); // ![](sequence.puml)
+  expect(all).toContain('Alice'); // inline ```plantuml
+  expect(all).toContain('Checkout'); // ```mermaid flowchart labels survive sanitizing
+
+  await expect(page.locator('.md table tr')).toHaveCount(2);
+  // links between spec files are rewritten to in-app navigation
+  await expect(page.locator('.md a[href="#/api/openapi.yaml"]')).toHaveCount(1);
+  await expect(page.locator('.md a.broken')).toHaveCount(0);
+});
+
+test('renders a PlantUML class diagram (Graphviz layout)', async ({ page }) => {
+  await page.goto('/#/classes.puml');
+  await expect.poll(() => previewText(page)).toContain('OrderLine');
+  await expect(page.locator('#pv-body .uml-err')).toHaveCount(0);
+});
+
+test('renders a Mermaid file and reports syntax errors', async ({ page }) => {
+  await page.goto('/#/flow.mmd');
+  await expect.poll(() => previewText(page)).toContain('Payment ok?');
+
+  await page.locator('#editor .cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('\n  ???: %%% [');
+  await expect(page.locator('#pv-body .uml-err')).toBeVisible();
+  await expect(page.locator('#dirty')).toBeVisible();
+});
+
+test('renders OpenAPI with Swagger UI (view only) and reports YAML errors', async ({ page }) => {
+  await page.goto('/#/api/openapi.yaml');
+  await expect(page.locator('.swagger-ui .info .title')).toContainText('Order Service');
+  await expect(page.locator('.swagger-ui .opblock')).toHaveCount(1);
+  await expect(page.locator('.try-out__btn')).toHaveCount(0);
+
+  await page.locator('#editor .cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('\n  bad: x: y');
+  await expect(page.locator('#pv-error')).toContainText('Parse error');
+});
+
+test('searches text and jumps to the matching line', async ({ page }) => {
+  await page.goto('/#/sequence.puml');
+  await expect.poll(() => previewText(page)).toContain('OrderService');
+
+  await page.keyboard.press('ControlOrMeta+k');
+  await expect(page.locator('#filter')).toBeFocused();
+  await page.locator('#filter').fill('immutable');
+  const hit = page.locator('#tree a.hit').first();
+  await expect(hit).toContainText('Orders are immutable after payment');
+  await expect(page.locator('#tree mark').first()).toHaveText('immutable');
+
+  await hit.click();
+  await expect(page.locator('#title')).toHaveText('README.md');
+  await expect(page.locator('.cm-activeLine')).toContainText('Orders are immutable after payment');
+
+  // results never show stale hits from an earlier query
+  await page.locator('#filter').fill('flowchart');
+  await expect(page.locator('#tree a.hit .tx').first()).toContainText('flowchart');
+  await expect(page.locator('#tree a.hit .tx', { hasText: 'immutable' })).toHaveCount(0);
+});
+
+test('creates a file, saves it and survives a reload', async ({ page, request }) => {
+  page.on('dialog', (d) => void d.accept('notes/e2e-created.md'));
+  await page.goto('/');
+  await page.locator('#new').click();
+  await expect(page.locator('#title')).toHaveText('notes/e2e-created.md');
+
+  await page.locator('#editor .cm-content').click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.type('Saved by the e2e test');
+  await expect(page.locator('#dirty')).toBeVisible();
+  await page.keyboard.press('ControlOrMeta+s');
+  await expect(page.locator('#dirty')).toBeHidden();
+
+  const r = await request.get('/api/file?path=notes/e2e-created.md');
+  expect((await r.json()).content).toContain('Saved by the e2e test');
+
+  await page.reload();
+  await expect(page.locator('.md')).toContainText('Saved by the e2e test');
+});

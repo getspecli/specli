@@ -1,0 +1,4 @@
+* text=auto eol=lf
+*.exe binary
+web/package-lock.json -diff
+e2e/package-lock.json -diff

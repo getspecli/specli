@@ -1,0 +1,7 @@
+@startuml
+actor Customer
+Customer -> OrderService: POST /orders
+OrderService -> PaymentService: authorize(amount)
+PaymentService --> OrderService: ok
+OrderService --> Customer: 201 Created
+@enduml

@@ -1,0 +1,9 @@
+@startuml
+class Order {
+  +id: UUID
+  +total(): Money
+}
+class OrderLine
+Order "1" *-- "many" OrderLine
+Order --> Customer
+@enduml

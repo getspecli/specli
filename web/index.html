@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>specli</title>
+  <link rel="icon" href="data:," />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="brand">
+        <strong id="proj">specli</strong>
+        <button id="new" title="Create a new file" hidden>+ New</button>
+      </div>
+      <input id="filter" type="search" placeholder="Filter files / search text (Ctrl+K)" autocomplete="off" />
+      <nav id="tree"></nav>
+      <div id="foot"></div>
+    </aside>
+    <main>
+      <header id="toolbar">
+        <span id="title">No file selected</span>
+        <span id="dirty" title="Unsaved changes" hidden>●</span>
+        <span class="spacer"></span>
+        <div class="seg" id="modes">
+          <button data-mode="edit">Editor</button>
+          <button data-mode="split">Split</button>
+          <button data-mode="preview">Preview</button>
+        </div>
+        <button id="save" class="primary" hidden>Save</button>
+      </header>
+      <div id="banner" hidden></div>
+      <div id="panes" class="mode-split" hidden>
+        <div id="editor"></div>
+        <div id="preview"><div id="pv-error" hidden></div><div id="pv-body"></div></div>
+      </div>
+      <div id="empty">Select a file on the left.</div>
+    </main>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
