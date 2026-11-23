@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo.svg" alt="specli" width="232" /></p>
+
 # specli
 
 Browser viewer/editor for spec-driven design artifacts, started from the CLI.
@@ -16,11 +18,21 @@ at that line.
 ```
 specli [directory] [--port 4747] [--no-open] [--readonly]
          [--plantuml-server URL | --plantuml-jar PATH] [--include-data]
+specli --self-update
 ```
+
+## Updating
+
+`specli --self-update` downloads the latest GitHub release for your platform, verifies it against the release's
+`checksums.txt` and replaces the running binary in place. Development builds (`dev`) refuse to self-update.
+
+The sidebar footer shows the running version and, when a newer release exists, an "Update available" link. The check
+is one cached request (at most every 6 h) from the specli server to the GitHub releases API; no file contents are
+sent. Disable it with `--no-update-check` or `SPECLI_NO_UPDATE_CHECK=1`.
 
 ## Diagram rendering
 
-PlantUML and Mermaid are rendered **inside the browser**, nothing to install and nothing leaves your machine:
+PlantUML and Mermaid are rendered **inside the browser**, nothing to install and diagram text never leaves your machine:
 
 - PlantUML uses the official engine compiled to JavaScript (`@plantuml/core`, MIT since 1.2026.6) with Graphviz as
   WebAssembly. It is the upstream project's "beta" JS build, so exotic diagrams or some `!include`/stdlib sprites can

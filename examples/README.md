@@ -17,6 +17,8 @@ Bob --> Alice: Hi
 
 ## Flow (Mermaid)
 
+ok this is cool
+
 ```mermaid
 flowchart LR
   Cart --> Checkout --> Payment
@@ -24,7 +26,7 @@ flowchart LR
 
 See also [the full flow](flow.mmd) and the [class model](classes.puml).
 
-## Decisions
+## Decisions and other cool things
 
 | # | Decision | Status |
 |---|----------|--------|

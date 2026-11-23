@@ -1,7 +1,7 @@
 import './style.css';
 import 'swagger-ui-dist/swagger-ui.css';
 import { basicSetup, EditorView } from 'codemirror';
-import { EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { keymap } from '@codemirror/view';
 import { markdown } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
@@ -19,12 +19,13 @@ type Mode = 'edit' | 'split' | 'preview';
 
 interface FileInfo { path: string; kind: Kind; size: number; mtime: string }
 interface Info { name: string; path: string; readonly: boolean; version: string; plantuml: { available: boolean; mode: string } }
+interface UpdateInfo { current: string; latest?: string; available: boolean; url?: string }
 interface Doc { path: string; kind: Kind; mtime: string; eol: 'lf' | 'crlf'; saved: string }
 interface ChangeEvent { type: 'change'; path: string; op: 'added' | 'modified' | 'removed'; mtime?: string }
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const els = {
-  proj: $('proj'), newBtn: $<HTMLButtonElement>('new'), filter: $<HTMLInputElement>('filter'),
+  newBtn: $<HTMLButtonElement>('new'), filter: $<HTMLInputElement>('filter'),
   tree: $('tree'), foot: $('foot'), title: $('title'), dirty: $('dirty'), modes: $('modes'),
   save: $<HTMLButtonElement>('save'), banner: $('banner'), panes: $('panes'), editor: $('editor'),
   preview: $('preview'), pvError: $('pv-error'), pvBody: $('pv-body'), empty: $('empty'),
@@ -37,7 +38,16 @@ let mode: Mode = 'split';
 let isDirty = false;
 let renderSeq = 0;
 const closedDirs = new Set<string>();
-const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+type Theme = 'auto' | 'light' | 'dark';
+const themeIcon: Record<Theme, string> = { auto: '◐', light: '☀', dark: '☾' };
+let theme: Theme = 'auto';
+try {
+  const saved = localStorage.getItem('specli-theme');
+  if (saved === 'light' || saved === 'dark') theme = saved;
+} catch { /* storage blocked: stay on auto */ }
+const isDark = () => theme === 'dark' || (theme === 'auto' && darkQuery.matches);
+const themeCompartment = new Compartment();
 
 // ---------- small helpers ----------
 
@@ -114,12 +124,31 @@ function makeState(text: string, path: string): EditorState {
       EditorView.lineWrapping,
       EditorState.readOnly.of(info.readonly),
       EditorView.updateListener.of((u) => { if (u.docChanged) onEdit(); }),
-      ...(dark ? [oneDark] : []),
+      themeCompartment.of(isDark() ? oneDark : []),
     ],
   });
 }
 
 const view = new EditorView({ parent: els.editor, state: makeState('', 'x.txt') });
+
+function applyTheme() {
+  if (theme === 'auto') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = theme;
+  view.dispatch({ effects: themeCompartment.reconfigure(isDark() ? oneDark : []) });
+  const btn = $('theme');
+  btn.textContent = themeIcon[theme];
+  btn.title = `Theme: ${theme} (click to change)`;
+}
+$('theme').addEventListener('click', () => {
+  theme = theme === 'auto' ? 'light' : theme === 'light' ? 'dark' : 'auto';
+  try {
+    if (theme === 'auto') localStorage.removeItem('specli-theme');
+    else localStorage.setItem('specli-theme', theme);
+  } catch { /* ignore */ }
+  applyTheme();
+});
+darkQuery.addEventListener('change', () => { if (theme === 'auto') applyTheme(); });
+applyTheme();
 
 function setDirty(d: boolean) {
   isDirty = d;
@@ -406,7 +435,20 @@ function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
   badge.textContent = kindBadge[f.kind];
   const name = document.createElement('span');
   name.className = 'name';
-  name.textContent = label;
+  const slash = label.lastIndexOf('/');
+  if (slash < 0) {
+    name.textContent = label;
+  } else {
+    // long paths: shrink the directory part first so the file name stays visible
+    const dir = document.createElement('span');
+    dir.className = 'dir';
+    dir.textContent = label.slice(0, slash + 1);
+    const base = document.createElement('span');
+    base.className = 'base';
+    base.textContent = label.slice(slash + 1);
+    name.append(dir, base);
+    name.classList.add('split');
+  }
   a.append(badge, name);
   return a;
 }
@@ -666,19 +708,32 @@ function connectEvents() {
 
 // ---------- boot ----------
 
+// Best-effort: the server asks GitHub (cached) and any failure just means no notice.
+async function showUpdateNotice() {
+  const r = await api<UpdateInfo>('/api/update');
+  if (!r.ok || !r.data.available || !r.data.latest) return;
+  const a = document.createElement('a');
+  a.className = 'update';
+  a.href = r.data.url || '#';
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  a.textContent = `Update available: ${r.data.latest}`;
+  a.title = 'Run "specli --self-update" to install it';
+  els.foot.append(a);
+}
+
 async function boot() {
   const r = await api<Info>('/api/info');
   if (r.ok) info = r.data;
   document.title = `${info.name} – specli`;
-  els.proj.textContent = info.name;
-  els.proj.title = info.path;
   els.newBtn.hidden = info.readonly;
   els.save.hidden = info.readonly;
   els.foot.innerHTML =
-    `specli ${esc(info.version)}${info.readonly ? ' · read-only' : ''}<br>` +
-    `${esc(info.path)}<br>` +
-    `PlantUML: ${info.plantuml.available ? esc(info.plantuml.mode) : 'built-in'}`;
+    `<div class="row"><span class="ver">specli ${esc(info.version)}</span>${info.readonly ? '<span class="chip">read-only</span>' : ''}</div>` +
+    `<div class="path" title="${esc(info.path)}"><bdi>${esc(info.path)}</bdi></div>` +
+    `<div class="row"><span class="k">PlantUML</span><span>${info.plantuml.available ? esc(info.plantuml.mode) : 'built-in'}</span></div>`;
   setDirty(false);
+  void showUpdateNotice();
   await refreshFiles();
   connectEvents();
   const p = pathFromHash();

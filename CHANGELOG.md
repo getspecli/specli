@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+- `specli --self-update` installs the latest release (checksum-verified).
+- The UI footer shows the version and a notice when a newer release is available (`--no-update-check` to disable).
+- New logo (favicon, sidebar, empty state) and a redesigned, darker footer.
+- Theme button in the toolbar: auto / light / dark.
+
 ## 0.2.0
 - PlantUML renders in the browser with the official JS engine (no Java/Graphviz/server needed); server and JAR back ends are optional.
 - Mermaid support: ```mermaid blocks, `![](x.mmd)` embeds and `.mmd`/`.mermaid` files.

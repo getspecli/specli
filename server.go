@@ -21,6 +21,7 @@ type Server struct {
 	sc           *scanner
 	pu           *PlantUML
 	hub          *hub
+	upd          *updateChecker
 	static       fs.FS
 	allowedHosts map[string]bool // nil = no Host check (non-loopback binding)
 }
@@ -32,6 +33,7 @@ func newServer(cfg *config, root string, static fs.FS, port int) *Server {
 		sc:     newScanner(root, cfg.includeData),
 		pu:     newPlantUML(cfg.puServer, cfg.puJar),
 		hub:    newHub(),
+		upd:    newUpdateChecker(!cfg.noUpdateChk),
 		static: static,
 	}
 	if isLoopback(cfg.host) {
@@ -48,6 +50,7 @@ func newServer(cfg *config, root string, static fs.FS, port int) *Server {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/info", s.handleInfo)
+	mux.HandleFunc("/api/update", s.handleUpdate)
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/file", s.handleFile)
 	mux.HandleFunc("/api/asset", s.handleAsset)

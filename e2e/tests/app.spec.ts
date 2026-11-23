@@ -19,7 +19,7 @@ test.afterEach(() => {
 const previewText = (page: Page) => page.locator('#pv-body').evaluate((e) => (e.textContent ?? '').replace(/\s+/g, ' '));
 
 test('lists files and renders Markdown with PlantUML and Mermaid', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('/#/README.md');
   await expect(page.locator('.md h1')).toHaveText('Order Service – Design');
   await expect(page.locator('#tree a.file')).toHaveCount(5);
 

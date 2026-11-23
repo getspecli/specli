@@ -35,6 +35,8 @@ type config struct {
 	puServer    string
 	puJar       string
 	showVersion bool
+	selfUpdate  bool
+	noUpdateChk bool
 }
 
 const usage = `specli - browser viewer/editor for spec-driven design artifacts
@@ -55,10 +57,14 @@ Options:
                          Env: SPECLI_PLANTUML_SERVER
   --plantuml-jar PATH    Optional: render PlantUML locally with "java -jar PATH".
                          Env: SPECLI_PLANTUML_JAR
+  --self-update          Download the latest release, verify its checksum and replace this binary
+  --no-update-check      Do not ask GitHub whether a newer release exists (the UI notice).
+                         Env: SPECLI_NO_UPDATE_CHECK=1
   --version              Print version
 
 By default PlantUML and Mermaid are rendered inside your browser; diagram text never leaves
-your machine unless you configure a PlantUML server yourself.
+your machine unless you configure a PlantUML server yourself. The only other outbound request is
+the update check against the GitHub releases API (disable with --no-update-check).
 `
 
 func parseArgs(args []string) (*config, error) {
@@ -74,6 +80,8 @@ func parseArgs(args []string) (*config, error) {
 	flags.StringVar(&cfg.puServer, "plantuml-server", os.Getenv("SPECLI_PLANTUML_SERVER"), "")
 	flags.StringVar(&cfg.puJar, "plantuml-jar", os.Getenv("SPECLI_PLANTUML_JAR"), "")
 	flags.BoolVar(&cfg.showVersion, "version", false, "")
+	flags.BoolVar(&cfg.selfUpdate, "self-update", false, "")
+	flags.BoolVar(&cfg.noUpdateChk, "no-update-check", os.Getenv("SPECLI_NO_UPDATE_CHECK") != "", "")
 
 	// Go's flag package stops at the first positional argument; allow
 	// "specli ./docs --port 5000" by parsing repeatedly.
@@ -155,6 +163,14 @@ func main() {
 	}
 	if cfg.showVersion {
 		fmt.Println(version)
+		return
+	}
+
+	if cfg.selfUpdate {
+		if err := runSelfUpdate(); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
 		return
 	}
 

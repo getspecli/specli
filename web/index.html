@@ -4,13 +4,13 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>specli</title>
-  <link rel="icon" href="data:," />
+  <link rel="icon" type="image/svg+xml" href="logo.svg" />
 </head>
 <body>
   <div id="app">
     <aside id="sidebar">
       <div class="brand">
-        <strong id="proj">specli</strong>
+        <img class="logo" src="logo-white.svg" alt="specli" width="87" height="30" />
         <button id="new" title="Create a new file" hidden>+ New</button>
       </div>
       <input id="filter" type="search" placeholder="Filter files / search text (Ctrl+K)" autocomplete="off" />
@@ -22,6 +22,7 @@
         <span id="title">No file selected</span>
         <span id="dirty" title="Unsaved changes" hidden>●</span>
         <span class="spacer"></span>
+        <button id="theme" title="Theme: auto (click to change)">◐</button>
         <div class="seg" id="modes">
           <button data-mode="edit">Editor</button>
           <button data-mode="split">Split</button>
@@ -34,7 +35,11 @@
         <div id="editor"></div>
         <div id="preview"><div id="pv-error" hidden></div><div id="pv-body"></div></div>
       </div>
-      <div id="empty">Select a file on the left.</div>
+      <div id="empty">
+        <img class="logo-light" src="logo-full-light.svg" alt="specli" width="232" height="80" />
+        <img class="logo-dark" src="logo-full-dark.svg" alt="" width="232" height="80" />
+        <p>Select a file on the left.</p>
+      </div>
     </main>
   </div>
   <script type="module" src="/src/main.ts"></script>
