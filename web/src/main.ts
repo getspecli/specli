@@ -178,12 +178,15 @@ function applyMode() {
   }
 }
 
+const restoring = () => restorePv !== null && Date.now() < restorePv.until;
+
 // Split view: keep both panes at the same relative scroll position.
 function syncScroll(a: HTMLElement, b: HTMLElement) {
   let echo: HTMLElement | null = null; // pane whose next scroll event is our own doing
   const follow = (from: HTMLElement, to: HTMLElement) => () => {
     if (echo === from) { echo = null; return; }
     if (effectiveMode() !== 'split') return;
+    if (restoring()) return; // positions are being restored per pane, don't cross-sync
     const room = from.scrollHeight - from.clientHeight;
     const target = Math.round((room > 0 ? from.scrollTop / room : 0) * (to.scrollHeight - to.clientHeight));
     if (Math.abs(target - to.scrollTop) < 1) return;
@@ -194,6 +197,35 @@ function syncScroll(a: HTMLElement, b: HTMLElement) {
   b.addEventListener('scroll', follow(b, a), { passive: true });
 }
 syncScroll(view.scrollDOM, els.preview);
+
+// Remember the scroll position per file: opening a file restores where it was
+// left (or starts at the top), instead of inheriting the previous file's offset.
+const scrollMemory = new Map<string, { ed?: number; pv?: number }>();
+let restorePv: { top: number; until: number } | null = null;
+function rememberScroll(path: string) {
+  const prev = scrollMemory.get(path);
+  // A hidden pane reports 0, so keep the old value unless the pane is visible.
+  scrollMemory.set(path, {
+    ed: view.scrollDOM.clientHeight ? view.scrollDOM.scrollTop : prev?.ed,
+    pv: els.preview.clientHeight ? els.preview.scrollTop : prev?.pv,
+  });
+}
+function restoreScroll(path: string) {
+  const m = scrollMemory.get(path);
+  restorePv = { top: m?.pv ?? 0, until: Date.now() + 2500 };
+  els.preview.scrollTop = restorePv.top;
+  const ed = m?.ed ?? 0;
+  view.scrollDOM.scrollTop = ed;
+  requestAnimationFrame(() => { view.scrollDOM.scrollTop = ed; });
+}
+// Diagrams and images grow the preview after the first render; keep the
+// restored position until the user scrolls on their own.
+for (const ev of ['wheel', 'touchstart', 'pointerdown', 'keydown']) {
+  for (const pane of [els.preview, view.scrollDOM]) pane.addEventListener(ev, () => { restorePv = null; }, { passive: true });
+}
+new ResizeObserver(() => {
+  if (restorePv && Date.now() < restorePv.until) els.preview.scrollTop = restorePv.top;
+}).observe(els.pvBody);
 
 els.modes.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest('button');
@@ -251,7 +283,14 @@ async function fillDiagram(el: HTMLElement, kind: DiagramKind, src: string, seq:
     msg.className = 'uml-err';
     msg.textContent = res.error;
     const pre = document.createElement('pre');
-    pre.textContent = src;
+    // Source with line numbers; the offending line (if known) is highlighted.
+    src.split(/\r\n|\r|\n/).forEach((text, i) => {
+      const row = document.createElement('span');
+      row.className = res.line === i + 1 ? 'uml-line uml-bad' : 'uml-line';
+      row.dataset.n = String(i + 1);
+      row.textContent = text + '\n';
+      pre.append(row);
+    });
     el.append(msg, pre);
   }
 }
@@ -741,6 +780,7 @@ async function openFile(path: string) {
     location.hash = hashFor(doc.path);
     return;
   }
+  if (doc) rememberScroll(doc.path);
   const r = await api<{ content: string; mtime: string; eol: 'lf' | 'crlf'; error?: string }>('/api/file?path=' + enc(path));
   if (!r.ok) {
     showBanner(`Cannot open ${path}: ${r.data?.error ?? r.status}`, [], true);
@@ -758,8 +798,9 @@ async function openFile(path: string) {
   renderTree();
   setPreviewError(null);
   if (kind !== 'openapi') { swagger = null; swaggerFor = null; }
+  restoreScroll(path);
   void renderPreview();
-  if (pendingLine?.path === path) { gotoLine(pendingLine.line); pendingLine = null; }
+  if (pendingLine?.path === path) { restorePv = null; gotoLine(pendingLine.line); pendingLine = null; }
 }
 
 async function save(force = false) {

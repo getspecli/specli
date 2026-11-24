@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.9
+- PlantUML errors are readable: a short message with the line number (e.g. a duplicated `@startuml` without `@enduml`, or a syntax error), with the diagram source shown below and the offending line highlighted.
+- Opening a file starts at the top, or at the position where you left that file, instead of inheriting the previous file's scroll offset.
+
 ## 0.3.8
 - PlantUML: `!include <archimate/Archimate>` works (the ArchiMate stdlib bundle is embedded and loaded on demand, no network access).
 - Examples: new ArchiMate diagram (`examples/archimate.puml`).

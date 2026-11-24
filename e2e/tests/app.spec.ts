@@ -59,6 +59,25 @@ test('renders a PlantUML class diagram (Graphviz layout)', async ({ page }) => {
   await expect(page.locator('#pv-body .uml-err')).toHaveCount(0);
 });
 
+test('reports PlantUML errors with a line number and highlights the line', async ({ page }) => {
+  await page.goto('/#/sequence.puml');
+  await expect(page.locator('#pv-body svg')).toBeVisible();
+
+  // a duplicated @startuml without @enduml (unsaved edit)
+  await page.locator('#editor .cm-content').click();
+  await page.keyboard.press('ControlOrMeta+Home');
+  await page.keyboard.type('@startuml\n');
+  await expect(page.locator('#pv-body .uml-err')).toContainText('has no @end');
+  await expect(page.locator('#pv-body .uml-err')).toContainText('Line 2');
+  await expect(page.locator('#pv-body .uml-bad')).toHaveCount(1);
+
+  // a syntax error reported by the engine itself
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('@startuml\nactor A\nfoo bar baz ->\n@enduml');
+  await expect(page.locator('#pv-body .uml-err')).toContainText('Line 3: syntax error near "foo bar baz ->"');
+  await expect(page.locator('#pv-body .uml-bad')).toContainText('foo bar baz');
+});
+
 test('renders a Mermaid file and reports syntax errors', async ({ page }) => {
   await page.goto('/#/flow.mmd');
   await expect.poll(() => previewText(page)).toContain('Payment ok?');
@@ -121,6 +140,23 @@ test('creates a file, saves it and survives a reload', async ({ page, request })
 
   await page.reload();
   await expect(page.locator('.md')).toContainText('Saved by the e2e test');
+});
+
+test('opens files at the top and restores the position when returning', async ({ page }) => {
+  await page.goto('/#/README.md');
+  await expect(page.locator('.md .uml-page svg')).toHaveCount(7);
+  const pv = page.locator('#preview');
+  await pv.evaluate((e) => { e.scrollTop = 400; });
+  await expect.poll(() => pv.evaluate((e) => e.scrollTop)).toBeGreaterThan(300);
+  const left = await pv.evaluate((e) => e.scrollTop);
+
+  await page.locator('#tree a.file', { hasText: 'roles.csv' }).click();
+  await expect(page.locator('#title')).toHaveText('roles.csv');
+  await expect.poll(() => pv.evaluate((e) => e.scrollTop)).toBe(0);
+
+  await page.locator('#tree a.file', { hasText: 'README.md' }).click();
+  await expect(page.locator('.md .uml-page svg')).toHaveCount(7);
+  await expect.poll(() => pv.evaluate((e, l) => Math.abs(e.scrollTop - l), left)).toBeLessThan(5);
 });
 
 test('renders front matter and csv as tables', async ({ page }) => {
