@@ -3,6 +3,7 @@
 ## 0.4.0
 - Sidebar redesign: the black header is gone, the logo sits on the sidebar background (light and dark logo per theme) and the "+ New" button uses the accent colour.
 - Folders start collapsed; opening a file (or a deep link) expands its parent folders.
+
 ## 0.3.9
 - PlantUML errors are readable: a short message with the line number (e.g. a duplicated `@startuml` without `@enduml`, or a syntax error), with the diagram source shown below and the offending line highlighted.
 - Opening a file starts at the top, or at the position where you left that file, instead of inheriting the previous file's scroll offset.
