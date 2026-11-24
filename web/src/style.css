@@ -38,7 +38,7 @@ button.primary:disabled { opacity: .45; cursor: default; }
 #tree details[open] > summary::before { content: "▾"; }
 #tree details > summary:hover { background: var(--hover); }
 #tree .children { margin-left: 12px; border-left: 1px solid var(--border); padding-left: 4px; }
-#tree details > summary { color: var(--fg); font-weight: 500; }
+#tree details > summary { color: var(--fg); }
 #tree a.file { display: flex; gap: 6px; align-items: center; padding: 2px 6px; border-radius: 4px; color: var(--fg); text-decoration: none; overflow: hidden; }
 #tree a.file:hover { background: var(--hover); }
 #tree a.file.active { background: var(--active); color: var(--fg); }
