@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.4
 - Install with Homebrew: `brew install getspecli/tap/specli`. The release workflow updates the tap automatically.
 - `--self-update` refuses to touch a Homebrew-managed binary and points to `brew upgrade specli`; the UI update notice does the same.
 
