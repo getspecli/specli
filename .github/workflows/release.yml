@@ -119,7 +119,10 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          sum() { grep " specli_${TAG}_$1.tar.gz\$" dist/checksums.txt | cut -d' ' -f1; }
+          sum() { grep " specli_${TAG}_$1.tar.gz\$" "$GITHUB_WORKSPACE/dist/checksums.txt" | cut -d' ' -f1; }
+          for t in darwin_arm64 darwin_amd64 linux_arm64 linux_amd64; do
+            [ -n "$(sum $t)" ] || { echo "no checksum for $t"; exit 1; }
+          done
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/getspecli/homebrew-tap.git" tap
           cd tap
           sed -e "s/@VERSION@/${TAG#v}/g" -e "s/@TAG@/${TAG}/g" \
