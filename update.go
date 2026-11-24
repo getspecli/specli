@@ -24,7 +24,7 @@ import (
 )
 
 // releasesAPI is a variable so tests can point it at a local server.
-var releasesAPI = "https://api.github.com/repos/mhauri/specli/releases/latest"
+var releasesAPI = "https://api.github.com/repos/getspecli/specli/releases/latest"
 
 const (
 	updateCacheTTL = 6 * time.Hour

@@ -26,7 +26,7 @@ One self-contained binary, nothing else to install.
 
 ## Install
 
-Download the archive for your platform from the [latest release](https://github.com/mhauri/specli/releases/latest)
+Download the archive for your platform from the [latest release](https://github.com/getspecli/specli/releases/latest)
 (`specli_<version>_<os>_<arch>`: linux, macOS and windows; amd64 and arm64, except windows amd64 only), check it
 against `checksums.txt`, extract it and put `specli` somewhere on your `PATH`:
 
