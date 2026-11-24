@@ -19,7 +19,7 @@ import (
 // FileInfo describes one spec artifact below the served root.
 type FileInfo struct {
 	Path  string `json:"path"`  // slash separated, relative to root
-	Kind  string `json:"kind"`  // markdown | plantuml | mermaid | csv | openapi | data
+	Kind  string `json:"kind"`  // markdown | plantuml | mermaid | csv | openapi | asyncapi | data
 	Size  int64  `json:"size"`  // bytes
 	Mtime string `json:"mtime"` // UnixNano as string (exceeds JS safe integer range)
 }
@@ -27,6 +27,7 @@ type FileInfo struct {
 var (
 	// also matches minified JSON such as {"openapi":"3.0.0",...}
 	openapiRe  = regexp.MustCompile(`(?m)(?:^|[{,])\s*"?(?:openapi|swagger)"?\s*:`)
+	asyncapiRe = regexp.MustCompile(`(?m)(?:^|[{,])\s*"?asyncapi"?\s*:`)
 	errTooMany = errors.New("too many files")
 )
 
@@ -76,7 +77,7 @@ func newScanner(root string, includeData bool) *scanner {
 
 func mtimeString(t time.Time) string { return strconv.FormatInt(t.UnixNano(), 10) }
 
-// detect decides whether a yaml/json file is an OpenAPI/Swagger document.
+// detect decides whether a yaml/json file is an OpenAPI/Swagger or AsyncAPI document.
 func (sc *scanner) detect(full string, info fs.FileInfo) string {
 	key := detectKey{full, info.ModTime().UnixNano(), info.Size()}
 	sc.mu.Lock()
@@ -90,7 +91,9 @@ func (sc *scanner) detect(full string, info fs.FileInfo) string {
 	if f, err := os.Open(full); err == nil {
 		buf, _ := io.ReadAll(io.LimitReader(f, 8192))
 		f.Close()
-		if openapiRe.Match(buf) {
+		if asyncapiRe.Match(buf) {
+			kind = "asyncapi"
+		} else if openapiRe.Match(buf) {
 			kind = "openapi"
 		}
 	}

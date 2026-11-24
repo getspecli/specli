@@ -11,11 +11,12 @@ import { Marked, type Tokens } from 'marked';
 import DOMPurify from 'dompurify';
 import { load as loadYaml } from 'js-yaml';
 import { detectDelimiter, parseCsv } from './csv';
+import { renderAsyncApi } from './asyncapi';
 import { renderMermaid, renderPlantumlInBrowser, type DiagramResult } from './diagrams';
 
 // ---------- types & state ----------
 
-type Kind = 'markdown' | 'plantuml' | 'mermaid' | 'csv' | 'openapi' | 'data';
+type Kind = 'markdown' | 'plantuml' | 'mermaid' | 'csv' | 'openapi' | 'asyncapi' | 'data';
 type Mode = 'edit' | 'split' | 'preview';
 
 interface FileInfo { path: string; kind: Kind; size: number; mtime: string }
@@ -529,6 +530,23 @@ async function renderOpenApi(text: string, path: string, seq: number) {
   swaggerFor = path;
 }
 
+function renderAsyncApiDoc(text: string) {
+  let spec: unknown;
+  try {
+    spec = loadYaml(text);
+  } catch (e) {
+    setPreviewError('Parse error: ' + (e as Error).message);
+    return;
+  }
+  if (!spec || typeof spec !== 'object' || !('asyncapi' in spec)) {
+    setPreviewError('Missing "asyncapi" version field');
+    return;
+  }
+  setPreviewError(null);
+  els.pvBody.className = '';
+  els.pvBody.replaceChildren(renderAsyncApi(spec as Record<string, unknown>));
+}
+
 // ---------- CSV ----------
 
 const MAX_CSV_ROWS = 5000;
@@ -565,7 +583,8 @@ async function renderPreview() {
   const seq = ++renderSeq;
   const text = view.state.doc.toString();
   const { kind, path } = doc;
-  if (kind !== 'openapi') { swagger = null; swaggerFor = null; setPreviewError(null); }
+  if (kind !== 'openapi') { swagger = null; swaggerFor = null; }
+  if (kind !== 'openapi' && kind !== 'asyncapi') setPreviewError(null);
   if (kind === 'markdown') {
     renderMarkdown(text, path, seq);
   } else if (kind === 'plantuml' || kind === 'mermaid') {
@@ -579,13 +598,15 @@ async function renderPreview() {
     renderCsv(text, path);
   } else if (kind === 'openapi') {
     await renderOpenApi(text, path, seq);
+  } else if (kind === 'asyncapi') {
+    renderAsyncApiDoc(text);
   }
 }
 const schedulePreview = debounce(() => void renderPreview(), 350);
 
 // ---------- file tree ----------
 
-const kindBadge: Record<Kind, string> = { markdown: 'MD', plantuml: 'UML', mermaid: 'MMD', csv: 'CSV', openapi: 'API', data: 'DAT' };
+const kindBadge: Record<Kind, string> = { markdown: 'MD', plantuml: 'UML', mermaid: 'MMD', csv: 'CSV', openapi: 'API', asyncapi: 'ASY', data: 'DAT' };
 
 interface TreeNode { name: string; path: string; dirs: Map<string, TreeNode>; files: FileInfo[] }
 
@@ -834,7 +855,7 @@ async function save(force = false) {
 els.save.addEventListener('click', () => void save());
 
 els.newBtn.addEventListener('click', async () => {
-  const p = prompt('New file path, relative to the project root (e.g. docs/design.md, diagrams/flow.puml, diagrams/flow.mmd, api/openapi.yaml):', 'docs/');
+  const p = prompt('New file path, relative to the project root (e.g. docs/design.md, diagrams/flow.puml, diagrams/flow.mmd, api/openapi.yaml, api/asyncapi.yaml):', 'docs/');
   if (!p) return;
   const path = p.trim().replace(/^\/+/, '');
   if (files.some((f) => f.path === path)) { location.hash = hashFor(path); return; }
@@ -844,6 +865,7 @@ els.newBtn.addEventListener('click', async () => {
   else if (isPuml(path)) content = '@startuml\n\n@enduml\n';
   else if (isMermaid(path)) content = 'flowchart TD\n  A[Start] --> B[End]\n';
   else if (ext === '.csv' || ext === '.tsv') content = ext === '.csv' ? 'name,description\n' : 'name\tdescription\n';
+  else if ((ext === '.yaml' || ext === '.yml') && /asyncapi/i.test(path)) content = 'asyncapi: 3.0.0\ninfo:\n  title: New API\n  version: 0.1.0\nchannels: {}\n';
   else if (ext === '.yaml' || ext === '.yml') content = 'openapi: 3.0.3\ninfo:\n  title: New API\n  version: 0.1.0\npaths: {}\n';
   else if (ext === '.json') content = '{\n  "openapi": "3.0.3",\n  "info": { "title": "New API", "version": "0.1.0" },\n  "paths": {}\n}\n';
   else { alert('Unsupported file type. Use .md, .puml, .mmd, .csv, .yaml/.yml or .json'); return; }

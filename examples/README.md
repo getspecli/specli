@@ -30,7 +30,7 @@ flowchart LR
   Cart --> Checkout --> Payment
 ```
 
-See also [the full flow](flow.mmd) and the [class model](classes.puml).
+See also [the full flow](flow.mmd), the [class model](classes.puml) and the [order events](asyncapi.yaml).
 
 ## Decisions and other cool things
 

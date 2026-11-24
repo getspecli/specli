@@ -2,7 +2,7 @@
 
 ## Known limits (MVP)
 
-- OpenAPI `$ref`s to other files are not resolved (single-file specs render fully).
+- OpenAPI `$ref`s to other files are not resolved (single-file specs render fully). The AsyncAPI viewer is a built-in lightweight renderer: it resolves `#/...` references within one file only and does not render bindings, traits or security schemes.
 - No multi-user editing; search is a plain case-insensitive substring scan (no index, no regex).
 - The optional server/JAR PlantUML back ends were only tested with a stub, not a real JAR or Kroki.
 - Go alternative for server-side rendering, not integrated: `github.com/ekalinin/gopuml` (MIT, pre-1.0, needs Go 1.26+).

@@ -21,7 +21,7 @@ const previewText = (page: Page) => page.locator('#pv-body').evaluate((e) => (e.
 test('lists files and renders Markdown with PlantUML and Mermaid', async ({ page }) => {
   await page.goto('/#/README.md');
   await expect(page.locator('.md h1')).toHaveText('Order Service – Design');
-  await expect(page.locator('#tree a.file')).toHaveCount(8);
+  await expect(page.locator('#tree a.file')).toHaveCount(9);
 
   // 3 PlantUML (2 embedded files + inline) and 4 Mermaid blocks
   const svgs = page.locator('.md .uml-page svg');
@@ -99,6 +99,17 @@ test('renders a Mermaid file and reports syntax errors', async ({ page }) => {
   await page.keyboard.type('\n  ???: %%% [');
   await expect(page.locator('#pv-body .uml-err')).toBeVisible();
   await expect(page.locator('#dirty')).toBeVisible();
+});
+
+test('renders AsyncAPI (v3) with channels, operations and schemas', async ({ page }) => {
+  await page.goto('/#/asyncapi.yaml');
+  await expect(page.locator('.async h1')).toHaveText('Order Events');
+  await expect(page.locator('.async-ch code', { hasText: 'orders/{region}/placed' })).toBeVisible();
+  await expect(page.locator('.async-act', { hasText: 'SEND' })).toBeVisible();
+  await expect(page.locator('.async-act', { hasText: 'RECEIVE' })).toBeVisible();
+  // $ref'd message payload resolved down to nested fields
+  await expect(page.locator('.async-schema td code', { hasText: 'quantity' }).first()).toBeVisible();
+  await expect(page.locator('#pv-error')).toBeHidden();
 });
 
 test('renders OpenAPI with Swagger UI (view only) and reports YAML errors', async ({ page }) => {

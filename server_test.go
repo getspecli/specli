@@ -100,6 +100,7 @@ func TestScanKindsAndVisibility(t *testing.T) {
 	write(t, root, "roles.csv", "role,desc\nadmin,all")
 	write(t, root, "api.yaml", "openapi: 3.0.3\ninfo: {}\n")
 	write(t, root, "swag.json", `{"swagger": "2.0"}`)
+	write(t, root, "events.yaml", "asyncapi: 3.0.0\ninfo: {}\n")
 	write(t, root, "other.yaml", "services:\n  web: {}\n")
 	write(t, root, "package.json", `{"name":"x"}`)
 	write(t, root, ".hidden/h.md", "h")
@@ -116,7 +117,7 @@ func TestScanKindsAndVisibility(t *testing.T) {
 	}
 	want := map[string]string{
 		"a.md": "markdown", "d/b.puml": "plantuml", "c.mmd": "mermaid", "roles.csv": "csv",
-		"api.yaml": "openapi", "swag.json": "openapi",
+		"api.yaml": "openapi", "swag.json": "openapi", "events.yaml": "asyncapi",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("scan mismatch\n got  %v\n want %v", got, want)

@@ -1,0 +1,80 @@
+asyncapi: 3.0.0
+info:
+  title: Order Events
+  version: 1.0.0
+  description: |
+    Events published by the **order service**. See also the [REST API](api/openapi.yaml).
+servers:
+  broker:
+    host: broker.example.com:5672
+    protocol: amqp
+    description: Production message broker
+channels:
+  orderPlaced:
+    address: orders/{region}/placed
+    description: Emitted once an order has been paid.
+    parameters:
+      region:
+        description: Sales region, e.g. `ch`
+    messages:
+      orderPlaced:
+        $ref: '#/components/messages/OrderPlaced'
+  orderCancelled:
+    address: orders/{region}/cancelled
+    parameters:
+      region:
+        description: Sales region
+    messages:
+      orderCancelled:
+        $ref: '#/components/messages/OrderCancelled'
+operations:
+  publishOrderPlaced:
+    action: send
+    summary: Announce a placed order
+    channel:
+      $ref: '#/channels/orderPlaced'
+  onOrderCancelled:
+    action: receive
+    summary: React to cancellations from the shop
+    channel:
+      $ref: '#/channels/orderCancelled'
+components:
+  messages:
+    OrderPlaced:
+      summary: An order was placed and paid
+      contentType: application/json
+      payload:
+        $ref: '#/components/schemas/Order'
+    OrderCancelled:
+      summary: An order was cancelled
+      contentType: application/json
+      payload:
+        type: object
+        required: [orderId]
+        properties:
+          orderId:
+            type: string
+          reason:
+            type: string
+            enum: [customer, fraud, out-of-stock]
+  schemas:
+    Order:
+      type: object
+      required: [id, total]
+      properties:
+        id:
+          type: string
+          format: uuid
+        total:
+          type: number
+          description: Gross amount in CHF
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              sku:
+                type: string
+              quantity:
+                type: integer
+                minimum: 1

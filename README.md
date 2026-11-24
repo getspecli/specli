@@ -15,13 +15,14 @@ One self-contained binary, nothing else to install.
 | Mermaid (`.mmd`, `.mermaid`) | SVG, live, syntax errors shown | CodeMirror |
 | CSV / TSV (`.csv`, `.tsv`) | table (delimiter auto-detected) | CodeMirror |
 | OpenAPI / Swagger (`.yaml`, `.yml`, `.json`) | Swagger UI (try-it-out disabled), live, parse errors shown | CodeMirror |
+| AsyncAPI 2.x / 3.x (`.yaml`, `.yml`, `.json`) | Servers, channels, operations, messages and schemas, live | CodeMirror |
 
 - **Search:** type in the sidebar box (`Ctrl/Cmd+K`) to filter file names and search all text; a hit opens the file at that line.
 - **Live reload:** external edits (git pull, your IDE, an AI agent) show up within about 1.5 s.
 - **Safe saving:** writes are atomic, concurrent changes on disk are detected, CRLF line endings are preserved.
 - **Local only:** binds to `127.0.0.1`, paths are confined to the served directory, and diagrams are rendered in the
   browser so their text never leaves your machine. A non-loopback `--host` forces `--readonly`.
-- YAML/JSON files are listed only if they contain a top-level `openapi:` or `swagger:` key, unless `--include-data`.
+- YAML/JSON files are listed only if they contain a top-level `openapi:`, `swagger:` or `asyncapi:` key, unless `--include-data`.
   Hidden folders and `node_modules` are skipped.
 
 ## Install
@@ -67,7 +68,7 @@ specli [directory] [options]
 | `--host ADDR` | Address to bind (default 127.0.0.1) |
 | `--no-open` | Do not open the browser |
 | `--readonly` | Disable saving and creating files |
-| `--include-data` | Also list non-OpenAPI `.yaml`/`.yml`/`.json` files (editor only) |
+| `--include-data` | Also list non-API `.yaml`/`.yml`/`.json` files (editor only) |
 | `--plantuml-server URL` | Render PlantUML on a server (e.g. Kroki) instead of the built-in engine. Env: `SPECLI_PLANTUML_SERVER` |
 | `--plantuml-jar PATH` | Render PlantUML with `java -jar PATH`. Env: `SPECLI_PLANTUML_JAR` |
 | `--no-update-check` | Do not check GitHub for a newer release |

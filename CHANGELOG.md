@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1
+- AsyncAPI support: `.yaml`/`.yml`/`.json` files with a top-level `asyncapi:` key are listed and rendered (v2 and v3: servers, channels, operations, messages, schemas). New example `examples/asyncapi.yaml`.
+- Folder names in the sidebar are no longer bold.
+
 ## 0.4.0
 - Sidebar redesign: the black header is gone, the logo sits on the sidebar background (light and dark logo per theme) and the "+ New" button uses the accent colour.
 - Folders start collapsed; opening a file (or a deep link) expands its parent folders.

@@ -41,7 +41,7 @@ type config struct {
 }
 
 const usage = `specli - browser viewer/editor for spec-driven design artifacts
-(Markdown, PlantUML, Mermaid, OpenAPI/Swagger YAML/JSON)
+(Markdown, PlantUML, Mermaid, OpenAPI/Swagger and AsyncAPI YAML/JSON)
 
 Usage:
   specli [directory] [options]
@@ -51,7 +51,7 @@ Options:
   --host ADDR            Address to bind (default 127.0.0.1). Non-loopback addresses force --readonly.
   --no-open              Do not open the browser
   --readonly             Disable saving/creating files
-  --include-data         Also list non-OpenAPI .yaml/.yml/.json files (editor only)
+  --include-data         Also list non-API .yaml/.yml/.json files (editor only)
   --plantuml-server URL  Optional: render PlantUML on a server instead of the built-in browser engine.
                          The endpoint must accept the diagram as POST body and return SVG
                          (Kroki: http://host:8000/plantuml/svg, plantuml-server: http://host:8080/svg).
