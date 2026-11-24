@@ -37,6 +37,21 @@ test('lists files and renders Markdown with PlantUML and Mermaid', async ({ page
   await expect(page.locator('.md a.broken')).toHaveCount(0);
 });
 
+test('clicking a diagram opens a zoomable overlay', async ({ page }) => {
+  await page.goto('/#/README.md');
+  const svg = page.locator('.md .uml-page svg').first();
+  await expect(svg).toBeVisible();
+  await svg.click();
+  const stage = page.locator('.zoom-stage');
+  await expect(stage).toBeVisible();
+  const before = (await stage.boundingBox())!.width;
+  await page.mouse.move(400, 300);
+  await page.mouse.wheel(0, -400);
+  await expect.poll(async () => (await stage.boundingBox())!.width).toBeGreaterThan(before);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.zoom-overlay')).toHaveCount(0);
+});
+
 test('renders a PlantUML class diagram (Graphviz layout)', async ({ page }) => {
   await page.goto('/#/classes.puml');
   await expect.poll(() => previewText(page)).toContain('OrderLine');

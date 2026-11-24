@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.7
+- Click a PlantUML or Mermaid diagram in the preview to open it in a zoomable overlay (scroll/pinch to zoom, drag to pan, double-click or `0` to reset, `Esc` to close).
+
 ## 0.3.6
 - Split view: the editor and preview scroll together.
 - New `--check-update` flag reports whether a newer release exists.

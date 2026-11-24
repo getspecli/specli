@@ -256,6 +256,64 @@ async function fillDiagram(el: HTMLElement, kind: DiagramKind, src: string, seq:
   }
 }
 
+// Click a diagram to open it in a zoomable overlay (wheel/pinch zoom, drag to pan).
+function openDiagramZoom(svgSrc: SVGElement) {
+  const r = svgSrc.getBoundingClientRect();
+  if (!r.width || !r.height) return;
+  const ov = document.createElement('div');
+  ov.className = 'zoom-overlay';
+  const stage = document.createElement('div');
+  stage.className = 'zoom-stage';
+  const svg = svgSrc.cloneNode(true) as SVGElement;
+  const fit = Math.min((innerWidth * 0.92) / r.width, (innerHeight * 0.88) / r.height);
+  svg.style.cssText = `width:${r.width * fit}px;height:${r.height * fit}px;max-width:none;display:block`;
+  stage.append(svg);
+  const hint = document.createElement('div');
+  hint.className = 'zoom-hint';
+  hint.textContent = 'Scroll to zoom · drag to move · double-click to reset · Esc to close';
+  ov.append(stage, hint);
+
+  let scale = 1, x = 0, y = 0;
+  const apply = () => { stage.style.transform = `translate(${x}px, ${y}px) scale(${scale})`; };
+  const zoomAt = (factor: number, cx: number, cy: number) => {
+    const next = Math.min(20, Math.max(0.2, scale * factor));
+    const k = next / scale;
+    // Keep the point under the cursor fixed (stage origin is the viewport centre).
+    const ox = cx - innerWidth / 2, oy = cy - innerHeight / 2;
+    x = ox - (ox - x) * k; y = oy - (oy - y) * k; scale = next; apply();
+  };
+  const close = () => { ov.remove(); window.removeEventListener('keydown', onKey, true); };
+  const onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    else if (e.key === '+' || e.key === '=') zoomAt(1.25, innerWidth / 2, innerHeight / 2);
+    else if (e.key === '-') zoomAt(0.8, innerWidth / 2, innerHeight / 2);
+    else if (e.key === '0') { scale = 1; x = 0; y = 0; apply(); }
+  };
+  ov.addEventListener('wheel', (e) => { e.preventDefault(); zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015)), e.clientX, e.clientY); }, { passive: false });
+  ov.addEventListener('dblclick', () => { scale = 1; x = 0; y = 0; apply(); });
+  let drag: { px: number; py: number; moved: boolean } | null = null;
+  ov.addEventListener('pointerdown', (e) => { drag = { px: e.clientX, py: e.clientY, moved: false }; ov.setPointerCapture(e.pointerId); ov.classList.add('grabbing'); });
+  ov.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.px, dy = e.clientY - drag.py;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    drag.px = e.clientX; drag.py = e.clientY; x += dx; y += dy; apply();
+  });
+  ov.addEventListener('pointerup', (e) => {
+    const wasClick = drag && !drag.moved;
+    drag = null; ov.classList.remove('grabbing');
+    if (wasClick && e.target === ov) close();
+  });
+  window.addEventListener('keydown', onKey, true);
+  document.body.append(ov);
+}
+
+els.pvBody.addEventListener('click', (e) => {
+  const page = (e.target as HTMLElement).closest('.uml-page');
+  const svg = page?.querySelector('svg');
+  if (svg) openDiagramZoom(svg);
+});
+
 // ---------- Markdown ----------
 
 const slug = (s: string) =>
