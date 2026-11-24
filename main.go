@@ -36,6 +36,7 @@ type config struct {
 	puJar       string
 	showVersion bool
 	selfUpdate  bool
+	checkUpdate bool
 	noUpdateChk bool
 }
 
@@ -57,6 +58,7 @@ Options:
                          Env: SPECLI_PLANTUML_SERVER
   --plantuml-jar PATH    Optional: render PlantUML locally with "java -jar PATH".
                          Env: SPECLI_PLANTUML_JAR
+  --check-update         Check whether a newer release exists and exit
   --self-update          Download the latest release, verify its checksum and replace this binary
   --no-update-check      Do not ask GitHub whether a newer release exists (the UI notice).
                          Env: SPECLI_NO_UPDATE_CHECK=1
@@ -80,6 +82,7 @@ func parseArgs(args []string) (*config, error) {
 	flags.StringVar(&cfg.puServer, "plantuml-server", os.Getenv("SPECLI_PLANTUML_SERVER"), "")
 	flags.StringVar(&cfg.puJar, "plantuml-jar", os.Getenv("SPECLI_PLANTUML_JAR"), "")
 	flags.BoolVar(&cfg.showVersion, "version", false, "")
+	flags.BoolVar(&cfg.checkUpdate, "check-update", false, "")
 	flags.BoolVar(&cfg.selfUpdate, "self-update", false, "")
 	flags.BoolVar(&cfg.noUpdateChk, "no-update-check", os.Getenv("SPECLI_NO_UPDATE_CHECK") != "", "")
 
@@ -166,6 +169,16 @@ func main() {
 		return
 	}
 
+	if cfg.checkUpdate {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := runCheckUpdate(ctx, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if cfg.selfUpdate {
 		if err := runSelfUpdate(); err != nil {
 			fmt.Fprintln(os.Stderr, "error:", err)
@@ -229,6 +242,11 @@ func main() {
 	}
 	fmt.Printf("specli %s - serving %s (%s)\n  %s\n  PlantUML: %s\n  Ctrl+C to stop\n",
 		version, abs, mode, url, srv.pu.Describe())
+	go func() {
+		if u := srv.upd.Check(ctx); u.Available {
+			fmt.Printf("  Update available: %s (you have %s) - run: %s\n", u.Latest, u.Current, upgradeHint(u.Manager))
+		}
+	}()
 	if !cfg.noOpen {
 		openBrowser(url)
 	}

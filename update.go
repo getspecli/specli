@@ -27,7 +27,8 @@ import (
 var releasesAPI = "https://api.github.com/repos/getspecli/specli/releases/latest"
 
 const (
-	updateCacheTTL = 6 * time.Hour
+	updateCacheTTL = time.Hour
+	updateRetryTTL = 5 * time.Minute // after a failed check
 	maxBinarySize  = 200 << 20
 )
 
@@ -148,6 +149,7 @@ type updateChecker struct {
 	enabled bool
 	mu      sync.Mutex
 	at      time.Time
+	ttl     time.Duration
 	cached  updateInfo
 }
 
@@ -157,7 +159,7 @@ func newUpdateChecker(enabled bool) *updateChecker {
 }
 
 // Check returns the cached result, refreshing it at most every updateCacheTTL.
-// Network errors are swallowed (and retried after the TTL): the notice is
+// Network errors are swallowed (and retried after updateRetryTTL): the notice is
 // best-effort and must never get in the way of the editor.
 func (u *updateChecker) Check(ctx context.Context) updateInfo {
 	if !u.enabled {
@@ -165,20 +167,50 @@ func (u *updateChecker) Check(ctx context.Context) updateInfo {
 	}
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if !u.at.IsZero() && time.Since(u.at) < updateCacheTTL {
+	if !u.at.IsZero() && time.Since(u.at) < u.ttl {
 		return u.cached
 	}
 	u.at = time.Now()
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if r, err := fetchLatest(cctx); err == nil {
-		u.cached = updateInfo{Current: version, Latest: r.Tag, Available: isNewer(version, r.Tag), URL: r.URL, Manager: u.cached.Manager}
+	r, err := fetchLatest(cctx)
+	if err != nil {
+		u.ttl = updateRetryTTL
+		return u.cached
 	}
+	u.ttl = updateCacheTTL
+	u.cached = updateInfo{Current: version, Latest: r.Tag, Available: isNewer(version, r.Tag), URL: r.URL, Manager: u.cached.Manager}
 	return u.cached
 }
 
 func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, s.upd.Check(r.Context()))
+}
+
+// upgradeHint is the command that installs a newer release for this install.
+func upgradeHint(manager string) string {
+	if manager == "homebrew" {
+		return "brew upgrade specli"
+	}
+	return "specli --self-update"
+}
+
+// runCheckUpdate implements --check-update: it always asks GitHub (no cache)
+// and reports whether a newer release exists.
+func runCheckUpdate(ctx context.Context, out io.Writer) error {
+	if _, ok := parseVersion(version); !ok {
+		return fmt.Errorf("this is a development build (%s), cannot compare versions", version)
+	}
+	rel, err := fetchLatest(ctx)
+	if err != nil {
+		return fmt.Errorf("checking for updates: %w", err)
+	}
+	if !isNewer(version, rel.Tag) {
+		fmt.Fprintf(out, "specli %s is up to date (latest release: %s)\n", version, rel.Tag)
+		return nil
+	}
+	fmt.Fprintf(out, "update available: %s -> %s\n  %s\n  install with: %s\n", version, rel.Tag, rel.URL, upgradeHint(installManager()))
+	return nil
 }
 
 // ---- self-update ----

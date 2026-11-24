@@ -50,9 +50,9 @@ Or build from source (Go 1.24+ and Node 22+): `make` produces `bin/specli`.
 
 With Homebrew: `brew upgrade specli` (`--self-update` is disabled for brew-managed installs).
 
-Otherwise `specli --self-update` downloads the latest release for your platform, verifies its checksum and replaces the binary.
+`specli --check-update` tells you whether a newer release exists. Otherwise `specli --self-update` downloads the latest release for your platform, verifies its checksum and replaces the binary.
 The sidebar footer shows the running version and an "Update available" link when a newer release exists. That check is
-one cached request (at most every 6 h) to the GitHub releases API and sends no file contents. Disable it with
+one cached request (at most hourly) to the GitHub releases API and sends no file contents. Disable it with
 `--no-update-check` or `SPECLI_NO_UPDATE_CHECK=1`.
 
 ## Usage
@@ -71,6 +71,7 @@ specli [directory] [options]
 | `--plantuml-server URL` | Render PlantUML on a server (e.g. Kroki) instead of the built-in engine. Env: `SPECLI_PLANTUML_SERVER` |
 | `--plantuml-jar PATH` | Render PlantUML with `java -jar PATH`. Env: `SPECLI_PLANTUML_JAR` |
 | `--no-update-check` | Do not check GitHub for a newer release |
+| `--check-update` | Check whether a newer release exists |
 | `--self-update` | Install the latest release |
 | `--version` | Print the version |
 

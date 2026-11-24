@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.6
+- Split view: the editor and preview scroll together.
+- New `--check-update` flag reports whether a newer release exists.
+- Easier update detection: the server prints a notice at startup, re-checks hourly (retries failures after 5 minutes), and the UI re-checks on tab focus and every 30 minutes.
+
 ## 0.3.5
 - Release workflow: fix the Homebrew tap update writing empty checksums into the formula.
 

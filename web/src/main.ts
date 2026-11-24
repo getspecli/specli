@@ -178,6 +178,23 @@ function applyMode() {
   }
 }
 
+// Split view: keep both panes at the same relative scroll position.
+function syncScroll(a: HTMLElement, b: HTMLElement) {
+  let echo: HTMLElement | null = null; // pane whose next scroll event is our own doing
+  const follow = (from: HTMLElement, to: HTMLElement) => () => {
+    if (echo === from) { echo = null; return; }
+    if (effectiveMode() !== 'split') return;
+    const room = from.scrollHeight - from.clientHeight;
+    const target = Math.round((room > 0 ? from.scrollTop / room : 0) * (to.scrollHeight - to.clientHeight));
+    if (Math.abs(target - to.scrollTop) < 1) return;
+    echo = to;
+    to.scrollTop = target;
+  };
+  a.addEventListener('scroll', follow(a, b), { passive: true });
+  b.addEventListener('scroll', follow(b, a), { passive: true });
+}
+syncScroll(view.scrollDOM, els.preview);
+
 els.modes.addEventListener('click', (e) => {
   const b = (e.target as HTMLElement).closest('button');
   if (!b || !b.dataset.mode) return;
@@ -777,6 +794,7 @@ function connectEvents() {
 async function showUpdateNotice() {
   const r = await api<UpdateInfo>('/api/update');
   if (!r.ok || !r.data.available || !r.data.latest) return;
+  if (els.foot.querySelector('a.update')) return;
   const a = document.createElement('a');
   a.className = 'update';
   a.href = r.data.url || '#';
@@ -801,6 +819,10 @@ async function boot() {
     `<div class="row"><span class="k">PlantUML</span><span>${info.plantuml.available ? esc(info.plantuml.mode) : 'built-in'}</span></div>`;
   setDirty(false);
   void showUpdateNotice();
+  // Long-running sessions: re-check periodically and when the tab regains focus
+  // (the server caches the answer, so this is cheap).
+  setInterval(() => void showUpdateNotice(), 30 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void showUpdateNotice(); });
   await refreshFiles();
   connectEvents();
   const p = pathFromHash();
