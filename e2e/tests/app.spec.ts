@@ -21,13 +21,14 @@ const previewText = (page: Page) => page.locator('#pv-body').evaluate((e) => (e.
 test('lists files and renders Markdown with PlantUML and Mermaid', async ({ page }) => {
   await page.goto('/#/README.md');
   await expect(page.locator('.md h1')).toHaveText('Order Service – Design');
-  await expect(page.locator('#tree a.file')).toHaveCount(7);
+  await expect(page.locator('#tree a.file')).toHaveCount(8);
 
-  // 2 PlantUML (embedded file + inline) and 4 Mermaid blocks
+  // 3 PlantUML (2 embedded files + inline) and 4 Mermaid blocks
   const svgs = page.locator('.md .uml-page svg');
-  await expect(svgs).toHaveCount(6);
+  await expect(svgs).toHaveCount(7);
   const all = (await svgs.evaluateAll((els) => els.map((e) => e.textContent ?? ''))).join(' ');
   expect(all).toContain('OrderService'); // ![](sequence.puml)
+  expect(all).toContain('Order service'); // ![](archimate.puml) via !include <archimate/Archimate>
   expect(all).toContain('Alice'); // inline ```plantuml
   expect(all).toContain('Checkout'); // ```mermaid flowchart labels survive sanitizing
 

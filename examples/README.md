@@ -15,6 +15,12 @@ Bob --> Alice: Hi
 @enduml
 ```
 
+## ArchiMate
+
+ArchiMate works through PlantUML's stdlib (`!include <archimate/Archimate>`), embedded from [archimate.puml](archimate.puml). Click any diagram to zoom into it.
+
+![Order handling layers](archimate.puml)
+
 ## Flow (Mermaid)
 
 ok this is cool

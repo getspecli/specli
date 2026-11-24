@@ -23,6 +23,8 @@ function loadClassicScript(src: string): Promise<void> {
 
 function loadPlantuml(): Promise<RenderToString> {
   plantuml ??= (async () => {
+    // Stdlib bundles (!include <archimate/Archimate>) are self-hosted and loaded on demand.
+    (window as unknown as { PLANTUML_STDLIB_BASE: string }).PLANTUML_STDLIB_BASE = '/plantuml-stdlib/';
     // Without Viz.js the engine falls back to its built-in Smetana layout.
     await loadClassicScript(vizUrl).catch((e) => console.warn('PlantUML: Graphviz layout unavailable', e));
     return (await import('@plantuml/core')).renderToString as RenderToString;

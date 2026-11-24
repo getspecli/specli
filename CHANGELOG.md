@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.8
+- PlantUML: `!include <archimate/Archimate>` works (the ArchiMate stdlib bundle is embedded and loaded on demand, no network access).
+- Examples: new ArchiMate diagram (`examples/archimate.puml`).
+
 ## 0.3.7
 - Click a PlantUML or Mermaid diagram in the preview to open it in a zoomable overlay (scroll/pinch to zoom, drag to pan, double-click or `0` to reset, `Esc` to close).
 

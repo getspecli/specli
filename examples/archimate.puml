@@ -1,0 +1,17 @@
+@startuml
+!include <archimate/Archimate>
+
+title Order handling – ArchiMate layers
+
+Business_Actor(customer, "Customer")
+Business_Service(ordering, "Order service")
+Application_Component(orderApp, "Order Service")
+Application_Service(orderApi, "Order API")
+Technology_Node(k8s, "Kubernetes cluster")
+
+Rel_Serving(ordering, customer, "serves")
+Rel_Realization(orderApp, ordering, "realizes")
+Rel_Serving(orderApi, ordering, "supports")
+Rel_Assignment(orderApp, orderApi, "provides")
+Rel_Realization(k8s, orderApp, "hosts")
+@enduml
