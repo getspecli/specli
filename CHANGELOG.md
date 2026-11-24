@@ -1,8 +1,8 @@
 # Changelog
 
-
 ## 0.3.3
 - The repository moved to the `getspecli` GitHub organization; the update check and self-update now use `getspecli/specli`.
+
 ## 0.3.2
 - Markdown front matter is rendered as a key/value table.
 
