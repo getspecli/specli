@@ -38,6 +38,18 @@ test('lists files and renders Markdown with PlantUML and Mermaid', async ({ page
   await expect(page.locator('.md a.broken')).toHaveCount(0);
 });
 
+test('subfolders start collapsed and the opened file is revealed', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.locator('#tree details').first()).toBeVisible();
+  expect(await page.locator('#tree details[open]').count()).toBe(0);
+  await page.locator('#tree details > summary', { hasText: 'api' }).click();
+  await page.locator('#tree a.file', { hasText: 'openapi.yaml' }).click();
+  await expect(page.locator('#title')).toHaveText('api/openapi.yaml');
+  // deep link: the folder opens by itself
+  await page.goto('/?x=1#/api/openapi.yaml');
+  await expect(page.locator('#tree details[open] a.file.active')).toBeVisible();
+});
+
 test('clicking a diagram opens a zoomable overlay', async ({ page }) => {
   await page.goto('/#/README.md');
   const svg = page.locator('.md .uml-page svg').first();

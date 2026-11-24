@@ -38,7 +38,8 @@ let doc: Doc | null = null;
 let mode: Mode = 'split';
 let isDirty = false;
 let renderSeq = 0;
-const closedDirs = new Set<string>();
+// Folders start collapsed; the ones the user (or an opened file) expanded stay open.
+const openDirs = new Set<string>();
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 type Theme = 'auto' | 'light' | 'dark';
 const themeIcon: Record<Theme, string> = { auto: '◐', light: '☀', dark: '☾' };
@@ -634,8 +635,8 @@ function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
 function renderNode(n: TreeNode, into: HTMLElement) {
   for (const d of [...n.dirs.values()].sort((a, b) => a.name.localeCompare(b.name))) {
     const det = document.createElement('details');
-    det.open = !closedDirs.has(d.path);
-    det.addEventListener('toggle', () => { if (det.open) closedDirs.delete(d.path); else closedDirs.add(d.path); });
+    det.open = openDirs.has(d.path);
+    det.addEventListener('toggle', () => { if (det.open) openDirs.add(d.path); else openDirs.delete(d.path); });
     const sum = document.createElement('summary');
     sum.textContent = d.name;
     const kids = document.createElement('div');
@@ -793,6 +794,9 @@ async function openFile(path: string) {
   els.title.textContent = path;
   els.panes.hidden = false;
   els.empty.hidden = true;
+  // Reveal the opened file in the tree.
+  const parts = path.split('/').slice(0, -1);
+  parts.forEach((_, i) => openDirs.add(parts.slice(0, i + 1).join('/')));
   setDirty(false);
   applyMode();
   renderTree();

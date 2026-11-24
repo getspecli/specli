@@ -28,11 +28,9 @@ button.primary:hover { background: var(--accent); color: var(--accent-fg); filte
 button.primary:disabled { opacity: .45; cursor: default; }
 
 #sidebar { background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
-.brand { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; gap: 8px; background: #18181b; border-bottom: 1px solid var(--border); }
+.brand { display: flex; justify-content: space-between; align-items: center; padding: 14px 18px 8px; gap: 8px; }
 .brand .logo { display: block; flex: none; }
-.brand button { color: #b4b4bd; }
-.brand button:hover { background: rgba(255,255,255,.12); color: #fff; }
-#filter { margin: 4px 10px 8px; padding: 5px 9px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--fg); }
+#filter { margin: 4px 12px 10px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 5px; background: var(--bg); color: var(--fg); }
 #filter:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
 #tree { flex: 1; overflow: auto; padding: 0 6px 12px; }
 #tree details > summary { cursor: pointer; padding: 2px 6px; border-radius: 4px; list-style: none; color: var(--muted); user-select: none; }
@@ -75,13 +73,13 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 #banner.error { background: var(--err-bg); color: var(--err); }
 #empty { margin: auto; color: var(--muted); text-align: center; }
 #empty img { display: block; margin: 0 auto 4px; }
-#empty .logo-dark { display: none; }
+#empty .logo-dark, .brand .logo-dark { display: none; }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) #empty .logo-light { display: none; }
-  :root:not([data-theme="light"]) #empty .logo-dark { display: block; }
+  :root:not([data-theme="light"]) #empty .logo-light, :root:not([data-theme="light"]) .brand .logo-light { display: none; }
+  :root:not([data-theme="light"]) #empty .logo-dark, :root:not([data-theme="light"]) .brand .logo-dark { display: block; }
 }
-:root[data-theme="dark"] #empty .logo-light { display: none; }
-:root[data-theme="dark"] #empty .logo-dark { display: block; }
+:root[data-theme="dark"] #empty .logo-light, :root[data-theme="dark"] .brand .logo-light { display: none; }
+:root[data-theme="dark"] #empty .logo-dark, :root[data-theme="dark"] .brand .logo-dark { display: block; }
 #empty p { margin: 0; }
 
 #panes { flex: 1; display: flex; min-height: 0; }
