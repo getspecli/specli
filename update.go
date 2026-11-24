@@ -139,6 +139,9 @@ type updateInfo struct {
 	Latest    string `json:"latest,omitempty"`
 	Available bool   `json:"available"`
 	URL       string `json:"url,omitempty"`
+	// Manager names the package manager that owns this binary ("homebrew"),
+	// so the UI can suggest its upgrade command instead of --self-update.
+	Manager string `json:"manager,omitempty"`
 }
 
 type updateChecker struct {
@@ -150,7 +153,7 @@ type updateChecker struct {
 
 func newUpdateChecker(enabled bool) *updateChecker {
 	_, ok := parseVersion(version)
-	return &updateChecker{enabled: enabled && ok, cached: updateInfo{Current: version}}
+	return &updateChecker{enabled: enabled && ok, cached: updateInfo{Current: version, Manager: installManager()}}
 }
 
 // Check returns the cached result, refreshing it at most every updateCacheTTL.
@@ -169,7 +172,7 @@ func (u *updateChecker) Check(ctx context.Context) updateInfo {
 	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if r, err := fetchLatest(cctx); err == nil {
-		u.cached = updateInfo{Current: version, Latest: r.Tag, Available: isNewer(version, r.Tag), URL: r.URL}
+		u.cached = updateInfo{Current: version, Latest: r.Tag, Available: isNewer(version, r.Tag), URL: r.URL, Manager: u.cached.Manager}
 	}
 	return u.cached
 }
@@ -179,6 +182,24 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---- self-update ----
+
+// isHomebrewPath reports whether exe (symlinks resolved) lives in a Homebrew
+// Cellar, i.e. brew owns the file and replacing it would break its bookkeeping.
+func isHomebrewPath(exe string) bool {
+	return strings.Contains(filepath.ToSlash(exe), "/Cellar/")
+}
+
+// installManager returns "homebrew" when the running binary was installed by brew.
+func installManager() string {
+	exe, err := os.Executable()
+	if err == nil {
+		exe, err = filepath.EvalSymlinks(exe)
+	}
+	if err == nil && isHomebrewPath(exe) {
+		return "homebrew"
+	}
+	return ""
+}
 
 func archiveName(tag, goos, goarch string) string {
 	ext := ".tar.gz"
@@ -349,6 +370,9 @@ func runSelfUpdate() error {
 	}
 	if err != nil {
 		return err
+	}
+	if isHomebrewPath(exe) {
+		return errors.New("specli was installed with Homebrew; update it with: brew upgrade specli")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()

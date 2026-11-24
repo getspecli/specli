@@ -26,7 +26,13 @@ One self-contained binary, nothing else to install.
 
 ## Install
 
-Download the archive for your platform from the [latest release](https://github.com/getspecli/specli/releases/latest)
+With [Homebrew](https://brew.sh) (macOS and Linux):
+
+```
+brew install getspecli/tap/specli
+```
+
+Or download the archive for your platform from the [latest release](https://github.com/getspecli/specli/releases/latest)
 (`specli_<version>_<os>_<arch>`: linux, macOS and windows; amd64 and arm64, except windows amd64 only), check it
 against `checksums.txt`, extract it and put `specli` somewhere on your `PATH`:
 
@@ -42,7 +48,9 @@ Or build from source (Go 1.24+ and Node 22+): `make` produces `bin/specli`.
 
 ### Update
 
-`specli --self-update` downloads the latest release for your platform, verifies its checksum and replaces the binary.
+With Homebrew: `brew upgrade specli` (`--self-update` is disabled for brew-managed installs).
+
+Otherwise `specli --self-update` downloads the latest release for your platform, verifies its checksum and replaces the binary.
 The sidebar footer shows the running version and an "Update available" link when a newer release exists. That check is
 one cached request (at most every 6 h) to the GitHub releases API and sends no file contents. Disable it with
 `--no-update-check` or `SPECLI_NO_UPDATE_CHECK=1`.

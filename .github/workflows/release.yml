@@ -99,3 +99,35 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           gh release create "$TAG" dist/* --repo "$REPO" --title "$TAG" --generate-notes
+
+  tap:
+    name: Update Homebrew tap
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bin-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > checksums.txt
+      - name: Push formula to getspecli/homebrew-tap
+        env:
+          # Fine-grained PAT (or deploy key token) with contents:write on getspecli/homebrew-tap
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          sum() { grep " specli_${TAG}_$1.tar.gz\$" dist/checksums.txt | cut -d' ' -f1; }
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/getspecli/homebrew-tap.git" tap
+          cd tap
+          sed -e "s/@VERSION@/${TAG#v}/g" -e "s/@TAG@/${TAG}/g" \
+              -e "s/@SHA_DARWIN_ARM64@/$(sum darwin_arm64)/" -e "s/@SHA_DARWIN_AMD64@/$(sum darwin_amd64)/" \
+              -e "s/@SHA_LINUX_ARM64@/$(sum linux_arm64)/"   -e "s/@SHA_LINUX_AMD64@/$(sum linux_amd64)/" \
+              formula.rb.tmpl > Formula/specli.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/specli.rb
+          git commit -m "specli ${TAG}"
+          git push

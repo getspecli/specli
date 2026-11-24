@@ -355,3 +355,17 @@ func TestParseArgsAllowsFlagsAfterDirectory(t *testing.T) {
 		t.Errorf("defaults: %+v", cfg)
 	}
 }
+
+func TestIsHomebrewPath(t *testing.T) {
+	for path, want := range map[string]bool{
+		"/opt/homebrew/Cellar/specli/0.3.3/bin/specli":              true,
+		"/usr/local/Cellar/specli/0.3.3/bin/specli":                 true,
+		"/home/linuxbrew/.linuxbrew/Cellar/specli/0.3.3/bin/specli": true,
+		"/usr/local/bin/specli":                                     false,
+		"/opt/homebrew/bin/specli":                                  false, // unresolved symlink, callers resolve first
+	} {
+		if got := isHomebrewPath(path); got != want {
+			t.Errorf("isHomebrewPath(%q) = %v, want %v", path, got, want)
+		}
+	}
+}

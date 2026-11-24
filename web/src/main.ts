@@ -20,7 +20,7 @@ type Mode = 'edit' | 'split' | 'preview';
 
 interface FileInfo { path: string; kind: Kind; size: number; mtime: string }
 interface Info { name: string; path: string; readonly: boolean; version: string; plantuml: { available: boolean; mode: string } }
-interface UpdateInfo { current: string; latest?: string; available: boolean; url?: string }
+interface UpdateInfo { current: string; latest?: string; available: boolean; url?: string; manager?: string }
 interface Doc { path: string; kind: Kind; mtime: string; eol: 'lf' | 'crlf'; saved: string }
 interface ChangeEvent { type: 'change'; path: string; op: 'added' | 'modified' | 'removed'; mtime?: string }
 
@@ -783,7 +783,9 @@ async function showUpdateNotice() {
   a.target = '_blank';
   a.rel = 'noopener noreferrer';
   a.textContent = `Update available: ${r.data.latest}`;
-  a.title = 'Run "specli --self-update" to install it';
+  a.title = r.data.manager === 'homebrew'
+    ? 'Run "brew upgrade specli" to install it'
+    : 'Run "specli --self-update" to install it';
   els.foot.append(a);
 }
 

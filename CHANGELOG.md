@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Install with Homebrew: `brew install getspecli/tap/specli`. The release workflow updates the tap automatically.
+- `--self-update` refuses to touch a Homebrew-managed binary and points to `brew upgrade specli`; the UI update notice does the same.
+
 ## 0.3.3
 - The repository moved to the `getspecli` GitHub organization; the update check and self-update now use `getspecli/specli`.
 
