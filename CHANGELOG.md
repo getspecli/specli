@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.3.5
+- Release workflow: fix the Homebrew tap update writing empty checksums into the formula.
+
 ## 0.3.4
 - Install with Homebrew: `brew install getspecli/tap/specli`. The release workflow updates the tap automatically.
 - `--self-update` refuses to touch a Homebrew-managed binary and points to `brew upgrade specli`; the UI update notice does the same.
