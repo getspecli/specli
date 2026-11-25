@@ -146,9 +146,13 @@ test('searches text and jumps to the matching line', async ({ page }) => {
 });
 
 test('creates a file, saves it and survives a reload', async ({ page, request }) => {
-  page.on('dialog', (d) => void d.accept('notes/e2e-created.md'));
   await page.goto('/');
   await page.locator('#new').click();
+  await page.locator('#new-types button', { hasText: 'Markdown' }).click();
+  await page.locator('#new-dir').fill('notes');
+  await page.locator('#new-name').fill('e2e-created');
+  await expect(page.locator('#new-path')).toHaveText('notes/e2e-created.md');
+  await page.locator('#new-create').click();
   await expect(page.locator('#title')).toHaveText('notes/e2e-created.md');
 
   await page.locator('#editor .cm-content').click();
@@ -190,4 +194,17 @@ test('renders front matter and csv as tables', async ({ page }) => {
   await page.goto('/#/roles.csv');
   await expect(page.locator('.md.csv tbody tr')).toHaveCount(2);
   await expect(page.locator('.md.csv')).toContainText('Read-only, no export');
+});
+
+test('opens the git changes dialog from the footer', async ({ page, request }) => {
+  const g = await (await request.get('/api/git')).json();
+  test.skip(!g.repo, 'git is not installed');
+  await page.goto('/');
+  const row = page.locator('#foot .git-row');
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page.locator('#git-dlg')).toBeVisible();
+  await expect(page.locator('#git-commit')).toBeDisabled(); // no message yet
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#git-dlg')).toBeHidden();
 });

@@ -22,6 +22,7 @@ type Server struct {
 	pu           *PlantUML
 	hub          *hub
 	upd          *updateChecker
+	git          *gitProbe
 	static       fs.FS
 	allowedHosts map[string]bool // nil = no Host check (non-loopback binding)
 }
@@ -34,6 +35,7 @@ func newServer(cfg *config, root string, static fs.FS, port int) *Server {
 		pu:     newPlantUML(cfg.puServer, cfg.puJar),
 		hub:    newHub(),
 		upd:    newUpdateChecker(!cfg.noUpdateChk),
+		git:    newGitProbe(root, !cfg.noGit),
 		static: static,
 	}
 	if isLoopback(cfg.host) {
@@ -51,6 +53,8 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/info", s.handleInfo)
 	mux.HandleFunc("/api/update", s.handleUpdate)
+	mux.HandleFunc("/api/git", s.handleGit)
+	mux.HandleFunc("/api/git/commit", s.handleGitCommit)
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/file", s.handleFile)
 	mux.HandleFunc("/api/asset", s.handleAsset)
@@ -151,6 +155,35 @@ func (s *Server) handleInfo(w http.ResponseWriter, r *http.Request) {
 		"version":  version,
 		"plantuml": map[string]any{"available": s.pu.Available(), "mode": s.pu.mode},
 	})
+}
+
+func (s *Server) handleGit(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, s.git.status())
+}
+
+func (s *Server) handleGitCommit(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpErr(w, 405, "POST only")
+		return
+	}
+	if s.cfg.readonly {
+		httpErr(w, 403, "read-only mode")
+		return
+	}
+	var req struct {
+		Message string   `json:"message"`
+		Paths   []string `json:"paths"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		httpErr(w, 400, "bad request")
+		return
+	}
+	summary, err := s.git.commit(req.Message, req.Paths)
+	if err != nil {
+		httpErr(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"ok": true, "summary": summary})
 }
 
 func (s *Server) handleFiles(w http.ResponseWriter, r *http.Request) {

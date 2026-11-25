@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -368,5 +369,84 @@ func TestIsHomebrewPath(t *testing.T) {
 		if got := isHomebrewPath(path); got != want {
 			t.Errorf("isHomebrewPath(%q) = %v, want %v", path, got, want)
 		}
+	}
+}
+
+func TestGitStatus(t *testing.T) {
+	bin, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		c := exec.Command(bin, append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	if st := newGitProbe(dir, true).status(); !st.Available || st.Repo {
+		t.Fatalf("plain dir: %+v", st)
+	}
+	if st := newGitProbe(dir, false).status(); st.Available {
+		t.Fatalf("disabled: %+v", st)
+	}
+	run("init", "-b", "main")
+	os.MkdirAll(filepath.Join(dir, "docs"), 0o755)
+	os.WriteFile(filepath.Join(dir, "docs", "a.md"), []byte("# a\n"), 0o644)
+	run("add", ".")
+	run("commit", "-m", "init")
+	os.WriteFile(filepath.Join(dir, "docs", "a.md"), []byte("# changed\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "docs", "new file.md"), []byte("x"), 0o644)
+	// a subdirectory as the served root reports paths relative to itself
+	st := newGitProbe(filepath.Join(dir, "docs"), true).status()
+	if !st.Repo || st.Branch != "main" || st.Changed != 2 || st.Files["a.md"] != "M" || st.Files["new file.md"] != "?" {
+		t.Fatalf("status: %+v", st)
+	}
+}
+
+func TestGitCommit(t *testing.T) {
+	bin, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		c := exec.Command(bin, append([]string{"-C", dir}, args...)...)
+		c.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		out, err := c.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+	run("init", "-b", "main")
+	os.WriteFile(filepath.Join(dir, "a.md"), []byte("a"), 0o644)
+	run("add", ".")
+	run("commit", "-m", "init")
+	os.WriteFile(filepath.Join(dir, "a.md"), []byte("a2"), 0o644)
+	os.WriteFile(filepath.Join(dir, "b.md"), []byte("b"), 0o644)
+	os.WriteFile(filepath.Join(dir, "c.md"), []byte("c"), 0o644)
+	t.Setenv("GIT_AUTHOR_NAME", "t")
+	t.Setenv("GIT_AUTHOR_EMAIL", "t@t")
+	t.Setenv("GIT_COMMITTER_NAME", "t")
+	t.Setenv("GIT_COMMITTER_EMAIL", "t@t")
+	g := newGitProbe(dir, true)
+	if _, err := g.commit("x", []string{"../etc/passwd"}); err == nil {
+		t.Fatal("expected refusal for a path without changes")
+	}
+	if _, err := g.commit(" ", []string{"a.md"}); err == nil {
+		t.Fatal("expected refusal for an empty message")
+	}
+	if _, err := g.commit("update a, add b", []string{"a.md", "b.md"}); err != nil {
+		t.Fatal(err)
+	}
+	st := g.status()
+	if st.Changed != 1 || st.Files["c.md"] != "?" {
+		t.Fatalf("only c.md should remain: %+v", st)
+	}
+	if out := run("log", "--oneline"); !strings.Contains(out, "update a, add b") {
+		t.Fatalf("log: %s", out)
 	}
 }

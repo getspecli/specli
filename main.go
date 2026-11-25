@@ -38,6 +38,7 @@ type config struct {
 	selfUpdate  bool
 	checkUpdate bool
 	noUpdateChk bool
+	noGit       bool
 }
 
 const usage = `specli - browser viewer/editor for spec-driven design artifacts
@@ -62,6 +63,8 @@ Options:
   --self-update          Download the latest release, verify its checksum and replace this binary
   --no-update-check      Do not ask GitHub whether a newer release exists (the UI notice).
                          Env: SPECLI_NO_UPDATE_CHECK=1
+  --no-git               Do not run the system git to show branch and change status.
+                         Env: SPECLI_NO_GIT=1
   --version              Print version
 
 By default PlantUML and Mermaid are rendered inside your browser; diagram text never leaves
@@ -84,6 +87,7 @@ func parseArgs(args []string) (*config, error) {
 	flags.BoolVar(&cfg.showVersion, "version", false, "")
 	flags.BoolVar(&cfg.checkUpdate, "check-update", false, "")
 	flags.BoolVar(&cfg.selfUpdate, "self-update", false, "")
+	flags.BoolVar(&cfg.noGit, "no-git", os.Getenv("SPECLI_NO_GIT") != "", "")
 	flags.BoolVar(&cfg.noUpdateChk, "no-update-check", os.Getenv("SPECLI_NO_UPDATE_CHECK") != "", "")
 
 	// Go's flag package stops at the first positional argument; allow

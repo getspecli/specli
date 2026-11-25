@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0
+- Git status: if a system `git` is installed and the served folder is in a repository, the sidebar footer shows the branch, ahead/behind and number of changed files, and files in the tree get an M/A/D/R/U/? marker. Click the footer row to open a changes dialog: review the changed files (jump to a file, tick which ones to include) and commit them with a message (Ctrl/Cmd+Enter). Only the ticked files are committed; other staged changes are left alone. The status refreshes every 5 s. Committing is disabled in read-only mode. Disable all git integration with `--no-git` / `SPECLI_NO_GIT=1`.
+- "+ New" opens a styled dialog instead of the browser prompt: pick the file type (Markdown, PlantUML, Mermaid, CSV, TSV, OpenAPI, AsyncAPI, OpenAPI JSON), choose a folder from the existing ones, and see the resulting path before creating. New Markdown/API files get the file name as their title.
+
 ## 0.4.1
 - AsyncAPI support: `.yaml`/`.yml`/`.json` files with a top-level `asyncapi:` key are listed and rendered (v2 and v3: servers, channels, operations, messages, schemas). New example `examples/asyncapi.yaml`.
 - Folder names in the sidebar are no longer bold.

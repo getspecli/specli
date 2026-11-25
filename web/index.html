@@ -43,6 +43,39 @@
       </div>
     </main>
   </div>
+  <dialog id="new-dlg" aria-labelledby="new-title">
+    <form method="dialog" id="new-form" autocomplete="off">
+      <h2 id="new-title">New file</h2>
+      <div class="nd-types" id="new-types" role="radiogroup" aria-label="File type"></div>
+      <label class="nd-field">Folder
+        <input id="new-dir" list="new-dirs" placeholder="(project root)" spellcheck="false" />
+        <datalist id="new-dirs"></datalist>
+      </label>
+      <label class="nd-field">Name
+        <input id="new-name" placeholder="design" spellcheck="false" />
+      </label>
+      <p class="nd-path">Creates <code id="new-path"></code></p>
+      <p class="nd-error" id="new-error" hidden></p>
+      <div class="nd-actions">
+        <button type="button" id="new-cancel">Cancel</button>
+        <button type="submit" class="primary" id="new-create">Create</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="git-dlg" aria-labelledby="git-title">
+    <form method="dialog" id="git-form" autocomplete="off">
+      <h2 id="git-title">Changes <span id="git-branch"></span></h2>
+      <label class="gd-all"><input type="checkbox" id="git-all" /> <span id="git-count"></span></label>
+      <div id="git-list" class="gd-list"></div>
+      <textarea id="git-msg" rows="3" placeholder="Commit message" spellcheck="true"></textarea>
+      <p class="nd-error" id="git-error" hidden></p>
+      <p class="gd-ok" id="git-ok" hidden></p>
+      <div class="nd-actions">
+        <button type="button" id="git-close">Close</button>
+        <button type="submit" class="primary" id="git-commit">Commit</button>
+      </div>
+    </form>
+  </dialog>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

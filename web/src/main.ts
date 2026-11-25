@@ -22,6 +22,7 @@ type Mode = 'edit' | 'split' | 'preview';
 interface FileInfo { path: string; kind: Kind; size: number; mtime: string }
 interface Info { name: string; path: string; readonly: boolean; version: string; plantuml: { available: boolean; mode: string } }
 interface UpdateInfo { current: string; latest?: string; available: boolean; url?: string; manager?: string }
+interface GitInfo { available: boolean; repo: boolean; branch?: string; upstream?: string; ahead: number; behind: number; changed: number; files?: Record<string, string> }
 interface Doc { path: string; kind: Kind; mtime: string; eol: 'lf' | 'crlf'; saved: string }
 interface ChangeEvent { type: 'change'; path: string; op: 'added' | 'modified' | 'removed'; mtime?: string }
 
@@ -35,6 +36,7 @@ const els = {
 
 let info: Info = { name: '', path: '', readonly: true, version: '', plantuml: { available: false, mode: 'none' } };
 let files: FileInfo[] = [];
+let git: GitInfo | null = null;
 let doc: Doc | null = null;
 let mode: Mode = 'split';
 let isDirty = false;
@@ -625,6 +627,8 @@ function buildTree(list: FileInfo[]): TreeNode {
   return root;
 }
 
+const gitLabels: Record<string, string> = { M: 'Modified', A: 'Added', D: 'Deleted', R: 'Renamed', U: 'Merge conflict', '?': 'Untracked' };
+
 function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
   const a = document.createElement('a');
   a.className = 'file' + (doc?.path === f.path ? ' active' : '');
@@ -650,6 +654,14 @@ function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
     name.classList.add('split');
   }
   a.append(badge, name);
+  const g = git?.files?.[f.path];
+  if (g) {
+    const m = document.createElement('span');
+    m.className = 'git git-' + g.replace('?', 'u');
+    m.textContent = g === '?' ? 'U' : g;
+    m.title = gitLabels[g] ?? 'Changed';
+    a.append(m);
+  }
   return a;
 }
 
@@ -793,7 +805,7 @@ async function refreshFiles() {
     if (els.filter.value.trim().length >= 2) searchSoon(); // results may have changed on disk
   }
 }
-const refreshFilesSoon = debounce(() => void refreshFiles(), 300);
+const refreshFilesSoon = debounce(() => { void refreshFiles(); refreshGitSoon(); }, 300);
 
 // ---------- open / save ----------
 
@@ -854,29 +866,89 @@ async function save(force = false) {
 }
 els.save.addEventListener('click', () => void save());
 
-els.newBtn.addEventListener('click', async () => {
-  const p = prompt('New file path, relative to the project root (e.g. docs/design.md, diagrams/flow.puml, diagrams/flow.mmd, api/openapi.yaml, api/asyncapi.yaml):', 'docs/');
-  if (!p) return;
-  const path = p.trim().replace(/^\/+/, '');
-  if (files.some((f) => f.path === path)) { location.hash = hashFor(path); return; }
-  const ext = extOf(path);
-  let content: string;
-  if (ext === '.md' || ext === '.markdown') content = '# Title\n\n';
-  else if (isPuml(path)) content = '@startuml\n\n@enduml\n';
-  else if (isMermaid(path)) content = 'flowchart TD\n  A[Start] --> B[End]\n';
-  else if (ext === '.csv' || ext === '.tsv') content = ext === '.csv' ? 'name,description\n' : 'name\tdescription\n';
-  else if ((ext === '.yaml' || ext === '.yml') && /asyncapi/i.test(path)) content = 'asyncapi: 3.0.0\ninfo:\n  title: New API\n  version: 0.1.0\nchannels: {}\n';
-  else if (ext === '.yaml' || ext === '.yml') content = 'openapi: 3.0.3\ninfo:\n  title: New API\n  version: 0.1.0\npaths: {}\n';
-  else if (ext === '.json') content = '{\n  "openapi": "3.0.3",\n  "info": { "title": "New API", "version": "0.1.0" },\n  "paths": {}\n}\n';
-  else { alert('Unsupported file type. Use .md, .puml, .mmd, .csv, .yaml/.yml or .json'); return; }
+interface NewType { id: string; label: string; ext: string; hint: string; template: (name: string) => string }
+const newTypes: NewType[] = [
+  { id: 'md', label: 'Markdown', ext: '.md', hint: 'Notes, specs, docs', template: (n) => `# ${n}\n\n` },
+  { id: 'puml', label: 'PlantUML', ext: '.puml', hint: 'UML diagram', template: () => '@startuml\n\n@enduml\n' },
+  { id: 'mmd', label: 'Mermaid', ext: '.mmd', hint: 'Flowchart, sequence, ...', template: () => 'flowchart TD\n  A[Start] --> B[End]\n' },
+  { id: 'csv', label: 'CSV', ext: '.csv', hint: 'Comma-separated table', template: () => 'name,description\n' },
+  { id: 'tsv', label: 'TSV', ext: '.tsv', hint: 'Tab-separated table', template: () => 'name\tdescription\n' },
+  { id: 'openapi', label: 'OpenAPI', ext: '.yaml', hint: 'REST API (YAML)', template: (n) => `openapi: 3.0.3\ninfo:\n  title: ${n}\n  version: 0.1.0\npaths: {}\n` },
+  { id: 'asyncapi', label: 'AsyncAPI', ext: '.yaml', hint: 'Event API (YAML)', template: (n) => `asyncapi: 3.0.0\ninfo:\n  title: ${n}\n  version: 0.1.0\nchannels: {}\n` },
+  { id: 'openapi-json', label: 'OpenAPI JSON', ext: '.json', hint: 'REST API (JSON)', template: (n) => `{\n  "openapi": "3.0.3",\n  "info": { "title": ${JSON.stringify(n)}, "version": "0.1.0" },\n  "paths": {}\n}\n` },
+];
+const newDlg = {
+  dlg: $<HTMLDialogElement>('new-dlg'), form: $<HTMLFormElement>('new-form'), types: $('new-types'),
+  dir: $<HTMLInputElement>('new-dir'), dirs: $('new-dirs'), name: $<HTMLInputElement>('new-name'),
+  path: $('new-path'), error: $('new-error'), cancel: $('new-cancel'), create: $<HTMLButtonElement>('new-create'),
+};
+let newType = newTypes[0];
+
+function newPath(): string {
+  const dir = newDlg.dir.value.trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+  let name = newDlg.name.value.trim().replace(/^\/+/, '');
+  if (!name) return '';
+  if (extOf(name) !== newType.ext && !(newType.ext === '.yaml' && extOf(name) === '.yml')) name += newType.ext;
+  return dir ? `${dir}/${name}` : name;
+}
+function updateNewPath() {
+  const p = newPath();
+  newDlg.path.textContent = p || '…';
+  newDlg.create.disabled = !p;
+  newDlg.error.hidden = true;
+}
+function selectNewType(t: NewType) {
+  newType = t;
+  for (const b of newDlg.types.querySelectorAll<HTMLButtonElement>('button')) {
+    const on = b.dataset.id === t.id;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-checked', String(on));
+  }
+  updateNewPath();
+}
+function openNewDialog() {
+  newDlg.types.innerHTML = newTypes.map((t) =>
+    `<button type="button" role="radio" data-id="${t.id}"><b>${esc(t.label)}</b><span>${esc(t.hint)}</span><code>${esc(t.ext)}</code></button>`).join('');
+  const dirs = new Set<string>();
+  for (const f of files) {
+    const parts = f.path.split('/').slice(0, -1);
+    for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
+  }
+  newDlg.dirs.innerHTML = [...dirs].sort().map((d) => `<option value="${esc(d)}"></option>`).join('');
+  newDlg.dir.value = doc?.path.includes('/') ? doc.path.replace(/\/[^/]*$/, '') : '';
+  newDlg.name.value = '';
+  selectNewType(newTypes[0]);
+  newDlg.dlg.showModal();
+  newDlg.name.focus();
+}
+async function createNewFile() {
+  const path = newPath();
+  if (!path) return;
+  if (path.split('/').some((s) => s === '..' || s === '')) { newDlg.error.textContent = 'Invalid path.'; newDlg.error.hidden = false; return; }
+  if (files.some((f) => f.path === path)) { newDlg.dlg.close(); location.hash = hashFor(path); return; }
+  const title = (path.split('/').pop() ?? path).replace(/\.[^.]+$/, '');
+  newDlg.create.disabled = true;
   const r = await api<{ error?: string }>('/api/file?path=' + enc(path), {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, baseMtime: '', eol: 'lf' }),
+    body: JSON.stringify({ content: newType.template(title), baseMtime: '', eol: 'lf' }),
   });
-  if (!r.ok) { showBanner('Cannot create file: ' + (r.data?.error ?? r.status), [], true); return; }
+  newDlg.create.disabled = false;
+  if (!r.ok) { newDlg.error.textContent = 'Cannot create file: ' + (r.data?.error ?? r.status); newDlg.error.hidden = false; return; }
+  newDlg.dlg.close();
   await refreshFiles();
   location.hash = hashFor(path);
+}
+els.newBtn.addEventListener('click', openNewDialog);
+newDlg.types.addEventListener('click', (e) => {
+  const id = (e.target as HTMLElement).closest<HTMLButtonElement>('button')?.dataset.id;
+  const t = newTypes.find((x) => x.id === id);
+  if (t) { selectNewType(t); newDlg.name.focus(); }
 });
+newDlg.dir.addEventListener('input', updateNewPath);
+newDlg.name.addEventListener('input', updateNewPath);
+newDlg.cancel.addEventListener('click', () => newDlg.dlg.close());
+newDlg.dlg.addEventListener('click', (e) => { if (e.target === newDlg.dlg) newDlg.dlg.close(); });
+newDlg.form.addEventListener('submit', (e) => { e.preventDefault(); void createNewFile(); });
 
 window.addEventListener('beforeunload', (e) => { if (isDirty) e.preventDefault(); });
 window.addEventListener('hashchange', () => {
@@ -932,6 +1004,137 @@ async function showUpdateNotice() {
   els.foot.append(a);
 }
 
+const gitDlg = {
+  dlg: $<HTMLDialogElement>('git-dlg'), branch: $('git-branch'), all: $<HTMLInputElement>('git-all'),
+  count: $('git-count'), list: $('git-list'), msg: $<HTMLTextAreaElement>('git-msg'),
+  error: $('git-error'), ok: $('git-ok'), close: $('git-close'), commit: $<HTMLButtonElement>('git-commit'),
+};
+// Files the user unchecked; everything else that is changed is selected by default.
+const gitUnchecked = new Set<string>();
+let committing = false;
+
+const gitSelected = () => Object.keys(git?.files ?? {}).filter((p) => !gitUnchecked.has(p));
+
+function updateGitDialogState() {
+  const total = Object.keys(git?.files ?? {}).length;
+  const n = gitSelected().length;
+  gitDlg.count.textContent = total ? `${n} of ${total} selected` : 'Nothing to commit';
+  gitDlg.all.checked = total > 0 && n === total;
+  gitDlg.all.indeterminate = n > 0 && n < total;
+  gitDlg.all.disabled = !total;
+  gitDlg.commit.disabled = committing || !n || !gitDlg.msg.value.trim() || info.readonly;
+  gitDlg.commit.title = info.readonly ? 'specli is running read-only' : '';
+  gitDlg.msg.disabled = info.readonly;
+}
+
+function renderGitDialog() {
+  if (!git) return;
+  gitDlg.branch.textContent = git.branch ? `on ${git.branch}` : '';
+  const entries = Object.entries(git.files ?? {}).sort(([a], [b]) => a.localeCompare(b));
+  for (const p of gitUnchecked) if (!git.files?.[p]) gitUnchecked.delete(p);
+  gitDlg.list.replaceChildren(...entries.map(([p, k]) => {
+    const row = document.createElement('label');
+    row.className = 'gd-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !gitUnchecked.has(p);
+    cb.addEventListener('change', () => { if (cb.checked) gitUnchecked.delete(p); else gitUnchecked.add(p); updateGitDialogState(); });
+    const m = document.createElement('span');
+    m.className = 'git git-' + k.replace('?', 'u');
+    m.textContent = k === '?' ? 'U' : k;
+    m.title = gitLabels[k] ?? 'Changed';
+    const name = document.createElement('span');
+    name.className = 'gd-path';
+    name.textContent = p;
+    name.title = p;
+    row.append(cb, m, name);
+    // Deleted files cannot be opened; everything else jumps to the file.
+    if (k !== 'D' && files.some((f) => f.path === p)) {
+      const open = document.createElement('a');
+      open.href = hashFor(p);
+      open.textContent = 'open';
+      open.className = 'gd-open';
+      open.addEventListener('click', () => gitDlg.dlg.close());
+      row.append(open);
+    }
+    return row;
+  }));
+  updateGitDialogState();
+}
+
+async function openGitDialog() {
+  gitDlg.error.hidden = true;
+  gitDlg.ok.hidden = true;
+  await refreshGit();
+  renderGitDialog();
+  gitDlg.dlg.showModal();
+  gitDlg.msg.focus();
+}
+
+async function commitSelected() {
+  const paths = gitSelected();
+  if (!paths.length || !gitDlg.msg.value.trim() || committing) return;
+  committing = true;
+  updateGitDialogState();
+  gitDlg.error.hidden = true;
+  gitDlg.ok.hidden = true;
+  const r = await api<{ summary?: string; error?: string }>('/api/git/commit', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message: gitDlg.msg.value, paths }),
+  });
+  committing = false;
+  if (!r.ok) {
+    gitDlg.error.textContent = r.data?.error ?? `Commit failed (${r.status})`;
+    gitDlg.error.hidden = false;
+  } else {
+    gitDlg.msg.value = '';
+    gitUnchecked.clear();
+    gitDlg.ok.textContent = 'Committed: ' + (r.data.summary ?? '');
+    gitDlg.ok.hidden = false;
+  }
+  await refreshGit();
+  renderGitDialog();
+}
+
+const gitRow = document.createElement('div');
+gitRow.className = 'row git-row';
+gitRow.tabIndex = 0;
+gitRow.setAttribute('role', 'button');
+gitRow.hidden = true;
+
+gitRow.addEventListener('click', () => void openGitDialog());
+gitRow.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); void openGitDialog(); } });
+gitDlg.all.addEventListener('change', () => {
+  gitUnchecked.clear();
+  if (!gitDlg.all.checked) for (const p of Object.keys(git?.files ?? {})) gitUnchecked.add(p);
+  renderGitDialog();
+});
+gitDlg.msg.addEventListener('input', updateGitDialogState);
+gitDlg.msg.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void commitSelected(); } });
+gitDlg.close.addEventListener('click', () => gitDlg.dlg.close());
+gitDlg.dlg.addEventListener('click', (e) => { if (e.target === gitDlg.dlg) gitDlg.dlg.close(); });
+document.getElementById('git-form')!.addEventListener('submit', (e) => { e.preventDefault(); void commitSelected(); });
+
+
+async function refreshGit() {
+  const r = await api<GitInfo>('/api/git');
+  if (!r.ok) return;
+  const before = JSON.stringify(git?.files ?? {});
+  git = r.data;
+  if (!git.available || !git.repo) { gitRow.hidden = true; } else {
+    const bits = [`<span class="git-branch">⎇ ${esc(git.branch ?? '?')}</span>`];
+    if (git.ahead) bits.push(`↑${git.ahead}`);
+    if (git.behind) bits.push(`↓${git.behind}`);
+    bits.push(git.changed ? `<span class="git-n">${git.changed} changed</span>` : 'clean');
+    gitRow.innerHTML = `<span class="k">Git</span>${bits.join(' ')}`;
+    gitRow.title = (git.upstream ? `Tracking ${git.upstream}. ` : 'No upstream branch. ') + 'Click to review changes.';
+    gitRow.hidden = false;
+  }
+  if (JSON.stringify(git.files ?? {}) !== before) renderTree();
+  if (gitDlg.dlg.open) renderGitDialog();
+}
+const refreshGitSoon = debounce(() => void refreshGit(), 400);
+
 async function boot() {
   const r = await api<Info>('/api/info');
   if (r.ok) info = r.data;
@@ -942,6 +1145,11 @@ async function boot() {
     `<div class="row"><span class="ver">specli ${esc(info.version)}</span>${info.readonly ? '<span class="chip">read-only</span>' : ''}</div>` +
     `<div class="path" title="${esc(info.path)}"><bdi>${esc(info.path)}</bdi></div>` +
     `<div class="row"><span class="k">PlantUML</span><span>${info.plantuml.available ? esc(info.plantuml.mode) : 'built-in'}</span></div>`;
+  els.foot.append(gitRow);
+  void refreshGit();
+  // .git is not watched, so commits/checkouts are picked up by polling and on focus.
+  setInterval(() => { if (!document.hidden) void refreshGit(); }, 5_000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) void refreshGit(); });
   setDirty(false);
   void showUpdateNotice();
   // Long-running sessions: re-check periodically and when the tab regains focus

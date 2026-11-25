@@ -2,13 +2,15 @@
 import { cpSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 
 const here = import.meta.dirname;
 const bin = process.env.SPECLI_BIN ?? resolve(here, '..', 'bin', process.platform === 'win32' ? 'specli.exe' : 'specli');
 const port = process.env.E2E_PORT ?? '4799';
 const work = mkdtempSync(join(tmpdir(), 'specli-e2e-'));
 cpSync(resolve(here, '..', 'examples'), work, { recursive: true });
+// A repository (all files untracked) so the git status UI has something to show; skipped without git.
+spawnSync('git', ['init', '-q', work], { stdio: 'ignore' });
 
 const child = spawn(bin, [work, '--no-open', '--port', port], { stdio: 'inherit' });
 const stop = (code = 0) => {

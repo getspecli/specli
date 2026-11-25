@@ -71,6 +71,7 @@ specli [directory] [options]
 | `--include-data` | Also list non-API `.yaml`/`.yml`/`.json` files (editor only) |
 | `--plantuml-server URL` | Render PlantUML on a server (e.g. Kroki) instead of the built-in engine. Env: `SPECLI_PLANTUML_SERVER` |
 | `--plantuml-jar PATH` | Render PlantUML with `java -jar PATH`. Env: `SPECLI_PLANTUML_JAR` |
+| `--no-git` | Do not run the system `git` (status in the footer, changes/commit dialog) (`SPECLI_NO_GIT=1`) |
 | `--no-update-check` | Do not check GitHub for a newer release |
 | `--check-update` | Check whether a newer release exists |
 | `--self-update` | Install the latest release |
