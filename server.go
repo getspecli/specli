@@ -258,6 +258,7 @@ func (s *Server) handleLint(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, 404, "not found")
 		return
 	}
+	s.sc.refreshConfig()
 	_, issues := s.sc.lint(full, filepath.FromSlash(rel), st)
 	if issues == nil {
 		issues = []Issue{}
@@ -319,7 +320,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 		httpErr(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]string{"path": req.To})
+	updated := fixLinksAfterMove(s.root, from, to)
+	writeJSON(w, 200, map[string]any{"path": req.To, "updated": updated})
 }
 
 // handleCopy duplicates a spec file (copy/paste and duplicate in the sidebar).
@@ -368,6 +370,11 @@ func (s *Server) handleCopy(w http.ResponseWriter, r *http.Request) {
 	} else if err != nil {
 		httpErr(w, 500, err.Error())
 		return
+	}
+	if kindByExt(req.To) == "markdown" && filepath.Dir(from) != filepath.Dir(to) {
+		// relative links must keep pointing at the same files from the new folder
+		out, _ := rewriteLinks(string(b), filepath.Dir(from), filepath.Dir(to), "", "")
+		b = []byte(out)
 	}
 	_, werr := f.Write(b)
 	if cerr := f.Close(); werr == nil {

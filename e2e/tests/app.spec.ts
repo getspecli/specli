@@ -306,6 +306,19 @@ test('the sidebar can be resized', async ({ page }) => {
 });
 
 // Adds a file, so keep it last: other tests count the example files.
+test('moving a file updates the links that point to it', async ({ page, request }) => {
+  const put = (path: string, content: string) =>
+    request.put('/api/file?path=' + path, { data: { content, baseMtime: '', eol: 'lf' } });
+  await put('linksrc.md', '# Source\n\nSee [target](linktarget.md#a).\n');
+  await put('linktarget.md', '# Target\n');
+  await page.goto('/');
+  await drop(page, '#tree details[data-dir="api"] > summary', (dt) => dt.setData('application/x-specli-path', 'linktarget.md'));
+  await expect(page.locator('#banner')).toContainText('Updated the links in 1 file');
+  expect((await (await request.get('/api/file?path=linksrc.md')).json()).content).toContain('(api/linktarget.md#a)');
+  await request.post('/api/delete', { data: { path: 'linksrc.md' } });
+  await request.post('/api/delete', { data: { path: 'api/linktarget.md' } });
+});
+
 test('dropping a file from the desktop adds it to the specs', async ({ page }) => {
   await page.goto('/');
   await drop(page, '#tree', (dt) => dt.items.add(new File(['# Dropped\n'], 'dropped.md', { type: 'text/markdown' })));

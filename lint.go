@@ -11,7 +11,7 @@ import (
 // Issue is one finding of the Markdown spec linter.
 type Issue struct {
 	Line    int    `json:"line"`
-	Rule    string `json:"rule"` // placeholder | empty-section | broken-link
+	Rule    string `json:"rule"` // placeholder | empty-section | broken-link | missing-section
 	Message string `json:"message"`
 }
 
@@ -22,7 +22,6 @@ var (
 	lintFenceRe   = regexp.MustCompile("^[ \t]*(```|~~~)")
 	lintCodeRe    = regexp.MustCompile("`[^`\n]*`")
 	lintLinkRe    = regexp.MustCompile(`!?\[[^\]]*\]\(<?([^)\s>]+)>?(?:\s+"[^"]*")?\)`)
-	lintTodoRe    = regexp.MustCompile(`(?i)\b(TODO|TBD|FIXME|XXX)\b|lorem ipsum`)
 	lintSchemeRe  = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9+.-]*:`)
 )
 
@@ -34,13 +33,15 @@ type linkRef struct {
 // lintResult is what is derived from the file content alone, so it can be
 // cached per file version. Link targets are checked against the disk later.
 type lintResult struct {
-	status string
-	issues []Issue
-	links  []linkRef
+	status   string
+	issues   []Issue
+	links    []linkRef
+	headings []string // lower case titles, for the required sections check
 }
 
 // lintMarkdown analyses the text of one Markdown file.
-func lintMarkdown(text string) lintResult {
+// placeholders may be nil to skip the placeholder rule.
+func lintMarkdown(text string, placeholders *regexp.Regexp) lintResult {
 	var res lintResult
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	body := text
@@ -79,6 +80,7 @@ func lintMarkdown(text string) lintResult {
 		}
 		if m := lintHeadingRe.FindStringSubmatch(ln); m != nil {
 			heads = append(heads, heading{line: n, level: len(m[1]), title: m[2]})
+			res.headings = append(res.headings, strings.ToLower(strings.TrimSpace(m[2])))
 			continue
 		}
 		if strings.TrimSpace(ln) == "" {
@@ -88,8 +90,10 @@ func lintMarkdown(text string) lintResult {
 			heads[len(heads)-1].content = true
 		}
 		plain := lintCodeRe.ReplaceAllString(ln, "")
-		if m := lintTodoRe.FindString(plain); m != "" {
-			res.issues = append(res.issues, Issue{n, "placeholder", "Placeholder text: " + m})
+		if placeholders != nil {
+			if m := placeholders.FindString(plain); m != "" {
+				res.issues = append(res.issues, Issue{n, "placeholder", "Placeholder text: " + m})
+			}
 		}
 		for _, m := range lintLinkRe.FindAllStringSubmatch(plain, -1) {
 			res.links = append(res.links, linkRef{n, m[1]})

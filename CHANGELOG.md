@@ -1,9 +1,13 @@
 # Changelog
 
 ## Unreleased
+- Moving or renaming a file in the sidebar now rewrites the relative links in other Markdown files that point to it, and the relative links inside the moved file. Copying a file into another folder keeps its links working. Links in code blocks and inline code, external URLs and anchors are left alone.
+- `specli lint [directory] [--format text|json|github]` checks the specs without starting the server and exits 1 on findings, for CI and pre-commit hooks. `github` prints workflow annotations.
+- `specli bundle <file.md> [--depth N] [--out FILE]` writes a spec and the specs it links to as one Markdown document, ready to paste into an agent prompt.
+- Lint rules are configurable in `.specli.yml` in the served folder: `disable` rules, custom `placeholders`, `ignore` globs and `require-sections` per path glob (new rule `missing-section`). Changes apply without a restart.
 - Lint issues are highlighted in the editor (amber line background with the message as tooltip).
 - The sidebar can be resized by dragging its right edge (double-click resets); the width is remembered.
-- Spec status: a `status:` key in Markdown front matter (`draft`, `review`, `approved` or `stale`) shows as a coloured badge in the sidebar and the toolbar. Type `status:draft` (or just `status:`) in the sidebar filter to list files by status.
+- Spec status: a `status:` key in Markdown front matter (any value, e.g. `draft` or `approved`; known values get a colour) shows as a badge in the sidebar and the toolbar. Type `status:draft` (or just `status:`) in the sidebar filter to list files by status.
 - Markdown lint: placeholder text (TODO, TBD, FIXME, XXX, lorem ipsum), empty sections and broken relative links are reported (the front matter `status` is shown but never linted, as statuses differ per company). The sidebar shows the issue count per file; the toolbar `⚠` button lists the issues of the open file and jumps to the line. Type `lint:` in the filter to list files with issues. Code blocks and inline code are ignored.
 - Drag and drop in the sidebar: drag a file onto a folder (or the empty area for the top level) to move it, and drop files from your desktop to add them to the specs. Existing files are never overwritten. Disabled in read-only mode.
 - Right-click in the sidebar opens a context menu (New file… and New folder… on folders and empty space): Copy, Paste (into the clicked folder), Duplicate, Rename and Delete (rename and delete use a dialog). Copies get a free name such as `a copy.md` and never overwrite files. Disabled in read-only mode.

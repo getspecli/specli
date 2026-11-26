@@ -912,12 +912,14 @@ async function moveTo(from: string, to: string) {
     showBanner(`Save or discard your changes in ${from} before moving it.`, [], true);
     return;
   }
-  const r = await api<{ error?: string }>('/api/move', {
+  const r = await api<{ error?: string; updated?: number }>('/api/move', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ from, to }),
   });
   if (!r.ok) { showBanner(`Cannot move ${from}: ${r.data?.error ?? r.status}`, [], true); return; }
   hideBanner();
+  const n = r.data?.updated ?? 0;
+  if (n) showBanner(`Updated the links in ${n} ${n === 1 ? 'file' : 'files'}.`, [{ label: 'Dismiss', fn: hideBanner }]);
   if (doc?.path === from) location.hash = hashFor(to);
   await refreshFiles();
 }

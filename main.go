@@ -46,6 +46,8 @@ const usage = `specli - browser viewer/editor for spec-driven design artifacts
 
 Usage:
   specli [directory] [options]
+  specli lint [directory] [--format text|json|github]   check the specs, exit 1 on findings (CI, hooks)
+  specli bundle <file.md> [--depth N] [--out FILE]      one document: a spec plus the specs it links to
 
 Options:
   --port N               Port to listen on (default 4747, next free port if busy; 0 = random)
@@ -160,6 +162,9 @@ func openBrowser(url string) {
 }
 
 func main() {
+	if code, ok := runSubcommand(os.Args[1:], os.Stdout, os.Stderr); ok {
+		os.Exit(code)
+	}
 	cfg, err := parseArgs(os.Args[1:])
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
