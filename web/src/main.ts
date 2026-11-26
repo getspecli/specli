@@ -2,7 +2,8 @@ import './style.css';
 import 'swagger-ui-dist/swagger-ui.css';
 import { basicSetup, EditorView } from 'codemirror';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
-import { keymap } from '@codemirror/view';
+import { keymap, Decoration, type DecorationSet } from '@codemirror/view';
+import { StateEffect, StateField } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
 import { json } from '@codemirror/lang-json';
@@ -19,7 +20,8 @@ import { renderMermaid, renderPlantumlInBrowser, type DiagramResult } from './di
 type Kind = 'markdown' | 'plantuml' | 'mermaid' | 'csv' | 'openapi' | 'asyncapi' | 'data';
 type Mode = 'edit' | 'split' | 'preview';
 
-interface FileInfo { path: string; kind: Kind; size: number; mtime: string }
+interface FileInfo { path: string; kind: Kind; size: number; mtime: string; status?: string; lint?: number }
+interface LintIssue { line: number; rule: string; message: string }
 interface Info { name: string; path: string; readonly: boolean; version: string; plantuml: { available: boolean; mode: string } }
 interface UpdateInfo { current: string; latest?: string; available: boolean; url?: string; manager?: string }
 interface GitInfo { available: boolean; repo: boolean; branch?: string; upstream?: string; ahead: number; behind: number; changed: number; files?: Record<string, string> }
@@ -119,6 +121,28 @@ function languageFor(path: string): Extension {
   }
 }
 
+// Lint issues are shown as line decorations; they are positions in the saved
+// version and move with the text while editing.
+const setLintLines = StateEffect.define<LintIssue[]>();
+const lintField = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update(deco, tr) {
+    deco = deco.map(tr.changes);
+    for (const e of tr.effects) {
+      if (!e.is(setLintLines)) continue;
+      const byLine = new Map<number, string[]>();
+      for (const i of e.value) {
+        if (i.line < 1 || i.line > tr.state.doc.lines) continue;
+        byLine.set(i.line, [...(byLine.get(i.line) ?? []), i.message]);
+      }
+      deco = Decoration.set([...byLine].sort((a, b) => a[0] - b[0]).map(([n, msgs]) =>
+        Decoration.line({ class: 'cm-lint-line', attributes: { title: msgs.join('\n') } }).range(tr.state.doc.line(n).from)));
+    }
+    return deco;
+  },
+  provide: (f) => EditorView.decorations.from(f),
+});
+
 function makeState(text: string, path: string): EditorState {
   return EditorState.create({
     doc: text,
@@ -127,6 +151,7 @@ function makeState(text: string, path: string): EditorState {
       basicSetup,
       languageFor(path),
       EditorView.lineWrapping,
+      lintField,
       EditorState.readOnly.of(info.readonly),
       EditorView.updateListener.of((u) => { if (u.docChanged) onEdit(); }),
       themeCompartment.of(isDark() ? oneDark : []),
@@ -629,6 +654,14 @@ function buildTree(list: FileInfo[]): TreeNode {
 
 const gitLabels: Record<string, string> = { M: 'Modified', A: 'Added', D: 'Deleted', R: 'Renamed', U: 'Merge conflict', '?': 'Untracked' };
 
+function statusChip(status: string): HTMLSpanElement {
+  const s = document.createElement('span');
+  s.className = 'status status-' + status.replace(/[^a-z]/g, '');
+  s.textContent = status;
+  s.title = 'Status: ' + status;
+  return s;
+}
+
 function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
   const a = document.createElement('a');
   a.className = 'file' + (doc?.path === f.path ? ' active' : '');
@@ -655,6 +688,14 @@ function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
     name.classList.add('split');
   }
   a.append(badge, name);
+  if (f.status) a.append(statusChip(f.status));
+  if (f.lint) {
+    const l = document.createElement('span');
+    l.className = 'lint-n';
+    l.textContent = String(f.lint);
+    l.title = `${f.lint} lint issue${f.lint === 1 ? '' : 's'}`;
+    a.append(l);
+  }
   const g = git?.files?.[f.path];
   if (g) {
     const m = document.createElement('span');
@@ -737,9 +778,17 @@ function renderHits(into: HTMLElement) {
   }
 }
 
+// Sidebar filters that select by metadata instead of text: "status:draft", "lint:" (files with lint issues)
+const metaFilter = (q: string): ((f: FileInfo) => boolean) | null => {
+  const s = /^status:\s*(\S*)$/i.exec(q);
+  if (s) { const v = s[1].toLowerCase(); return (f) => !!f.status && (!v || f.status.startsWith(v)); }
+  if (/^lint:?$/i.test(q)) return (f) => !!f.lint;
+  return null;
+};
+
 async function runSearch() {
   const q = els.filter.value.trim();
-  if (q.length < 2) { hits = []; hitsQuery = ''; searching = false; renderTree(); return; }
+  if (q.length < 2 || metaFilter(q)) { hits = []; hitsQuery = ''; searching = false; renderTree(); return; }
   searching = true;
   renderTree();
   const r = await api<{ results: SearchHit[]; truncated: boolean }>('/api/search?q=' + enc(q));
@@ -783,7 +832,8 @@ function renderTree() {
   const q = els.filter.value.trim().toLowerCase();
   els.tree.replaceChildren();
   if (q) {
-    const names = files.filter((x) => x.path.toLowerCase().includes(q));
+    const meta = metaFilter(q);
+    const names = files.filter(meta ?? ((x) => x.path.toLowerCase().includes(q)));
     if (names.length) {
       const head = document.createElement('div');
       head.className = 'hits-head';
@@ -792,7 +842,7 @@ function renderTree() {
       for (const f of names) els.tree.append(fileLink(f, f.path));
     }
     renderHits(els.tree);
-    if (!names.length && !hitsQuery && !searching) els.tree.append('No matches.');
+    if (!names.length && (meta || (!hitsQuery && !searching))) els.tree.append('No matches.');
   } else {
     renderNode(buildTree(files), els.tree);
     if (!files.length) els.tree.textContent = 'No Markdown, PlantUML, Mermaid, CSV or OpenAPI files found.';
@@ -805,6 +855,7 @@ async function refreshFiles() {
     files = r.data;
     renderTree();
     if (els.filter.value.trim().length >= 2) searchSoon(); // results may have changed on disk
+    void refreshLint();
   }
 }
 const refreshFilesSoon = debounce(() => { void refreshFiles(); refreshGitSoon(); }, 300);
@@ -1063,6 +1114,42 @@ fileDlg.cancel.addEventListener('click', () => fileDlg.dlg.close());
 fileDlg.dlg.addEventListener('click', (e) => { if (e.target === fileDlg.dlg) fileDlg.dlg.close(); });
 fileDlg.form.addEventListener('submit', (e) => { e.preventDefault(); fileDlgSubmit?.(); });
 
+// ---------- lint panel ----------
+
+const lintUi = { btn: $<HTMLButtonElement>('lint'), panel: $('lint-panel'), status: $('doc-status') };
+let lintOpen = false;
+
+function renderLint(issues: LintIssue[]) {
+  view.dispatch({ effects: setLintLines.of(issues) });
+  lintUi.btn.hidden = !issues.length;
+  lintUi.btn.textContent = `⚠ ${issues.length}`;
+  lintUi.btn.title = `${issues.length} lint issue${issues.length === 1 ? '' : 's'} (saved version)`;
+  lintUi.panel.hidden = !issues.length || !lintOpen;
+  lintUi.panel.replaceChildren(...issues.map((i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    const ln = document.createElement('span');
+    ln.className = 'ln';
+    ln.textContent = String(i.line);
+    b.append(ln, i.message);
+    b.addEventListener('click', () => gotoLine(i.line));
+    return b;
+  }));
+}
+
+let lintSeq = 0;
+async function refreshLint() {
+  const seq = ++lintSeq;
+  const path = doc?.path;
+  const entry = files.find((f) => f.path === path);
+  lintUi.status.replaceChildren(...(entry?.status ? [statusChip(entry.status)] : []));
+  if (!path || doc?.kind !== 'markdown' || !entry?.lint) { renderLint([]); return; }
+  const r = await api<LintIssue[]>('/api/lint?path=' + enc(path));
+  if (seq !== lintSeq || doc?.path !== path) return;
+  renderLint(r.ok ? r.data : []);
+}
+lintUi.btn.addEventListener('click', () => { lintOpen = !lintOpen; lintUi.panel.hidden = !lintOpen; });
+
 // ---------- open / save ----------
 
 async function openFile(path: string) {
@@ -1093,6 +1180,7 @@ async function openFile(path: string) {
   if (kind !== 'openapi') { swagger = null; swaggerFor = null; }
   restoreScroll(path);
   void renderPreview();
+  void refreshLint();
   if (pendingLine?.path === path) { restorePv = null; gotoLine(pendingLine.line); pendingLine = null; }
 }
 
@@ -1119,6 +1207,7 @@ async function save(force = false) {
   doc.saved = content;
   setDirty(false);
   hideBanner();
+  void refreshFiles();
 }
 els.save.addEventListener('click', () => void save());
 
@@ -1418,3 +1507,40 @@ async function boot() {
   if (p) void openFile(p);
 }
 void boot();
+
+// ---------- resizable sidebar ----------
+
+const app = $('app');
+const SIDEBAR_MIN = 180;
+const setSidebarWidth = (w: number) => {
+  const px = Math.round(Math.max(SIDEBAR_MIN, Math.min(w, window.innerWidth - 240)));
+  app.style.gridTemplateColumns = `${px}px 1fr`;
+  return px;
+};
+try {
+  const saved = Number(localStorage.getItem('specli-sidebar'));
+  if (saved) setSidebarWidth(saved);
+} catch { /* storage blocked: default width */ }
+const resizer = $('resizer');
+resizer.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  resizer.setPointerCapture(e.pointerId);
+  resizer.classList.add('active');
+  document.body.classList.add('resizing');
+});
+resizer.addEventListener('pointermove', (e) => {
+  if (resizer.hasPointerCapture(e.pointerId)) setSidebarWidth(e.clientX);
+});
+const endResize = (e: PointerEvent) => {
+  if (!resizer.hasPointerCapture(e.pointerId)) return;
+  resizer.releasePointerCapture(e.pointerId);
+  resizer.classList.remove('active');
+  document.body.classList.remove('resizing');
+  try { localStorage.setItem('specli-sidebar', String(setSidebarWidth(e.clientX))); } catch { /* ignore */ }
+};
+resizer.addEventListener('pointerup', endResize);
+resizer.addEventListener('pointercancel', endResize);
+resizer.addEventListener('dblclick', () => {
+  app.style.gridTemplateColumns = '';
+  try { localStorage.removeItem('specli-sidebar'); } catch { /* ignore */ }
+});

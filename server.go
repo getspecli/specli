@@ -57,6 +57,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/git/commit", s.handleGitCommit)
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/file", s.handleFile)
+	mux.HandleFunc("/api/lint", s.handleLint)
 	mux.HandleFunc("/api/move", s.handleMove)
 	mux.HandleFunc("/api/copy", s.handleCopy)
 	mux.HandleFunc("/api/delete", s.handleDelete)
@@ -238,6 +239,30 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 type moveRequest struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+}
+
+// handleLint returns the lint issues of one Markdown file.
+func (s *Server) handleLint(w http.ResponseWriter, r *http.Request) {
+	rel := r.URL.Query().Get("path")
+	if kindByExt(rel) != "markdown" {
+		writeJSON(w, 200, []Issue{})
+		return
+	}
+	full, err := s.resolve(rel)
+	if err != nil {
+		httpErr(w, 400, err.Error())
+		return
+	}
+	st, err := os.Stat(full)
+	if err != nil || !st.Mode().IsRegular() {
+		httpErr(w, 404, "not found")
+		return
+	}
+	_, issues := s.sc.lint(full, filepath.FromSlash(rel), st)
+	if issues == nil {
+		issues = []Issue{}
+	}
+	writeJSON(w, 200, issues)
 }
 
 // handleMove renames a spec file inside the root (drag and drop in the sidebar).

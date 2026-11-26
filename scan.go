@@ -22,6 +22,9 @@ type FileInfo struct {
 	Kind  string `json:"kind"`  // markdown | plantuml | mermaid | csv | openapi | asyncapi | data
 	Size  int64  `json:"size"`  // bytes
 	Mtime string `json:"mtime"` // UnixNano as string (exceeds JS safe integer range)
+
+	Status string `json:"status,omitempty"` // Markdown front matter "status", lower case
+	Lint   int    `json:"lint,omitempty"`   // number of lint issues (Markdown only)
 }
 
 var (
@@ -69,10 +72,11 @@ type scanner struct {
 	includeData bool
 	mu          sync.Mutex
 	cache       map[detectKey]string
+	lintCache   map[detectKey]lintResult
 }
 
 func newScanner(root string, includeData bool) *scanner {
-	return &scanner{root: root, includeData: includeData, cache: map[detectKey]string{}}
+	return &scanner{root: root, includeData: includeData, cache: map[detectKey]string{}, lintCache: map[detectKey]lintResult{}}
 }
 
 func mtimeString(t time.Time) string { return strconv.FormatInt(t.UnixNano(), 10) }
@@ -104,6 +108,31 @@ func (sc *scanner) detect(full string, info fs.FileInfo) string {
 	sc.cache[key] = kind
 	sc.mu.Unlock()
 	return kind
+}
+
+// lint analyses a Markdown file; the content analysis is cached per file
+// version, link targets are re-checked on every call because other files change.
+func (sc *scanner) lint(full, rel string, info fs.FileInfo) (string, []Issue) {
+	key := detectKey{full, info.ModTime().UnixNano(), info.Size()}
+	sc.mu.Lock()
+	res, ok := sc.lintCache[key]
+	sc.mu.Unlock()
+	if !ok {
+		if info.Size() <= maxFileSize {
+			if b, err := os.ReadFile(full); err == nil {
+				res = lintMarkdown(string(b))
+			}
+		}
+		sc.mu.Lock()
+		if len(sc.lintCache) > 5000 {
+			sc.lintCache = map[detectKey]lintResult{}
+		}
+		sc.lintCache[key] = res
+		sc.mu.Unlock()
+	}
+	issues := append(append([]Issue{}, res.issues...), brokenLinks(sc.root, rel, res.links)...)
+	sort.SliceStable(issues, func(i, j int) bool { return issues[i].Line < issues[j].Line })
+	return res.status, issues
 }
 
 func (sc *scanner) scan() ([]FileInfo, error) {
@@ -142,12 +171,18 @@ func (sc *scanner) scan() ([]FileInfo, error) {
 		if err != nil {
 			return nil
 		}
-		out = append(out, FileInfo{
+		fi := FileInfo{
 			Path:  filepath.ToSlash(rel),
 			Kind:  kind,
 			Size:  info.Size(),
 			Mtime: mtimeString(info.ModTime()),
-		})
+		}
+		if kind == "markdown" {
+			var issues []Issue
+			fi.Status, issues = sc.lint(p, rel, info)
+			fi.Lint = len(issues)
+		}
+		out = append(out, fi)
 		if len(out) >= maxFiles {
 			return errTooMany
 		}

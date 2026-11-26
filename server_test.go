@@ -523,3 +523,38 @@ func TestGitCommit(t *testing.T) {
 		t.Fatalf("log: %s", out)
 	}
 }
+
+func TestLintAndStatus(t *testing.T) {
+	s, root := newTestServer(t, nil)
+	write(t, root, "other.md", "# Other\n\ntext\n")
+	write(t, root, "spec.md", "---\ntitle: X\nstatus: Approved\n---\n# Spec\n\n## Empty\n\n## Filled\nTODO write this `TBD` [ok](other.md#top) [bad](missing.md) [web](https://x.example/a.md)\n\n```\nTODO in code\n[c](nope.md)\n```\n")
+	write(t, root, "bad.md", "---\nstatus: wip\n---\n# Bad\ntext\n")
+
+	var files []FileInfo
+	if r := do(s, "GET", "/api/files", "", nil); r.code != 200 || json.Unmarshal([]byte(r.body), &files) != nil {
+		t.Fatalf("files: %d %s", r.code, r.body)
+	}
+	byPath := map[string]FileInfo{}
+	for _, f := range files {
+		byPath[f.Path] = f
+	}
+	if f := byPath["spec.md"]; f.Status != "approved" || f.Lint != 3 {
+		t.Errorf("spec.md: status %q lint %d, want approved/3", f.Status, f.Lint)
+	}
+	if f := byPath["bad.md"]; f.Status != "wip" || f.Lint != 0 {
+		t.Errorf("bad.md: status %q lint %d, want wip/0", f.Status, f.Lint)
+	}
+	if f := byPath["other.md"]; f.Lint != 0 || f.Status != "" {
+		t.Errorf("other.md: %+v", f)
+	}
+
+	var issues []Issue
+	r := do(s, "GET", "/api/lint?path=spec.md", "", nil)
+	if err := json.Unmarshal([]byte(r.body), &issues); err != nil {
+		t.Fatal(err, r.body)
+	}
+	want := []Issue{{7, "empty-section", "Empty section: Empty"}, {10, "placeholder", "Placeholder text: TODO"}, {10, "broken-link", "Broken link: missing.md"}}
+	if !reflect.DeepEqual(issues, want) {
+		t.Errorf("issues:\n got %+v\nwant %+v", issues, want)
+	}
+}

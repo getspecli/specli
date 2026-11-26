@@ -269,6 +269,42 @@ test('context menu on a folder creates a file or a folder', async ({ page }) => 
   await page.locator('#new-dlg').getByRole('button', { name: 'Cancel' }).click();
 });
 
+test('shows spec status and lint issues, and filters by status', async ({ page }) => {
+  const path = 'lintcheck.md';
+  const content = '---\nstatus: draft\n---\n# Lint check\n\n## Empty\n\n## Next\nTODO fill in [x](nope.md)\n';
+  await page.request.put('/api/file?path=' + path, { data: { content, baseMtime: '', eol: 'lf' } });
+  await page.goto('/#/' + path);
+  const link = page.locator(`#tree a.file[data-path="${path}"]`);
+  await expect(link.locator('.status-draft')).toHaveText('draft');
+  await expect(link.locator('.lint-n')).toHaveText('3');
+  await expect(page.locator('#lint')).toHaveText('⚠ 3');
+  await page.locator('#lint').click();
+  await expect(page.locator('#lint-panel button')).toHaveCount(3);
+  await page.locator('#filter').fill('status:draft');
+  await expect(link).toHaveCount(1);
+  await expect(page.locator('#tree a.file')).not.toHaveCount(9);
+  await page.locator('#filter').fill('status:approved');
+  await expect(link).toHaveCount(0);
+  await expect(page.locator('.cm-lint-line')).toHaveCount(2);
+  await page.request.post('/api/delete', { data: { path } });
+});
+
+test('the sidebar can be resized', async ({ page }) => {
+  await page.goto('/');
+  const sidebar = page.locator('#sidebar');
+  const before = (await sidebar.boundingBox())!.width;
+  const box = (await page.locator('#resizer').boundingBox())!;
+  await page.mouse.move(box.x + 3, box.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 163, box.y + 100, { steps: 4 });
+  await page.mouse.up();
+  expect((await sidebar.boundingBox())!.width).toBeGreaterThan(before + 100);
+  await page.reload();
+  expect((await sidebar.boundingBox())!.width).toBeGreaterThan(before + 100);
+  await page.locator('#resizer').dblclick();
+  expect((await sidebar.boundingBox())!.width).toBeCloseTo(before, 0);
+});
+
 // Adds a file, so keep it last: other tests count the example files.
 test('dropping a file from the desktop adds it to the specs', async ({ page }) => {
   await page.goto('/');
