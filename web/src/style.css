@@ -40,6 +40,7 @@ button.primary:disabled { opacity: .45; cursor: default; }
 #tree .children { margin-left: 12px; border-left: 1px solid var(--border); padding-left: 4px; }
 #tree details > summary { color: var(--fg); }
 #tree a.file { display: flex; gap: 6px; align-items: center; padding: 2px 6px; border-radius: 4px; color: var(--fg); text-decoration: none; overflow: hidden; }
+#tree .drop { background: var(--active); outline: 1px dashed var(--muted); outline-offset: -1px; border-radius: 4px; }
 #tree a.file:hover { background: var(--hover); }
 #tree a.file.active { background: var(--active); color: var(--fg); }
 #tree a.file span.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -167,10 +168,10 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .async-params { margin: 4px 0 8px; }
 
 /* new-file dialog */
-#new-dlg { border: 1px solid var(--border); border-radius: 12px; padding: 0; background: var(--bg); color: var(--fg); width: min(560px, calc(100vw - 32px)); box-shadow: 0 24px 60px rgba(0,0,0,.35); }
-#new-dlg::backdrop { background: rgba(0,0,0,.5); }
-#new-form { display: flex; flex-direction: column; gap: 14px; padding: 20px 22px; }
-#new-form h2 { font-size: 16px; font-weight: 600; }
+#new-dlg, #file-dlg { border: 1px solid var(--border); border-radius: 12px; padding: 0; background: var(--bg); color: var(--fg); width: min(560px, calc(100vw - 32px)); box-shadow: 0 24px 60px rgba(0,0,0,.35); }
+#new-dlg::backdrop, #file-dlg::backdrop { background: rgba(0,0,0,.5); }
+#new-form, #file-form { display: flex; flex-direction: column; gap: 14px; padding: 20px 22px; }
+#new-form h2, #file-form h2 { font-size: 16px; font-weight: 600; }
 .nd-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px; }
 .nd-types button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); }
 .nd-types button b { color: var(--fg); font-weight: 600; }
@@ -215,3 +216,12 @@ main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 #git-msg { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); font: inherit; resize: vertical; }
 #git-msg:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
 .gd-ok { color: #2f855a; background: color-mix(in srgb, #2f855a 12%, transparent); padding: 6px 10px; border-radius: 6px; }
+#file-dlg { width: min(460px, calc(100vw - 32px)); }
+#file-title { overflow-wrap: anywhere; }
+#ctxmenu { position: fixed; z-index: 100; min-width: 150px; padding: 4px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 16px #0004; }
+#ctxmenu[hidden] { display: none; }
+#ctxmenu button { display: block; width: 100%; padding: 4px 12px; border: 0; background: none; color: inherit; font: inherit; text-align: left; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+#ctxmenu button:hover:not(:disabled) { background: var(--hover); }
+#ctxmenu button:disabled { color: var(--muted); cursor: default; }
+#ctxmenu hr { border: 0; border-top: 1px solid var(--border); margin: 4px 0; }
+#file-form [hidden] { display: none; }

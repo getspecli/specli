@@ -18,6 +18,7 @@ One self-contained binary, nothing else to install.
 | AsyncAPI 2.x / 3.x (`.yaml`, `.yml`, `.json`) | Servers, channels, operations, messages and schemas, live | CodeMirror |
 
 - **Search:** type in the sidebar box (`Ctrl/Cmd+K`) to filter file names and search all text; a hit opens the file at that line.
+- **Drag and drop:** move files between folders in the sidebar, or drop files from your desktop to add them. Right-click for copy, paste, duplicate, rename and delete.
 - **Live reload:** external edits (git pull, your IDE, an AI agent) show up within about 1.5 s.
 - **Safe saving:** writes are atomic, concurrent changes on disk are detected, CRLF line endings are preserved.
 - **Local only:** binds to `127.0.0.1`, paths are confined to the served directory, and diagrams are rendered in the

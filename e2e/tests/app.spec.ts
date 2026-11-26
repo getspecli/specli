@@ -208,3 +208,71 @@ test('opens the git changes dialog from the footer', async ({ page, request }) =
   await page.keyboard.press('Escape');
   await expect(page.locator('#git-dlg')).toBeHidden();
 });
+
+// Synthetic drag events: Playwright cannot drive native HTML5 drag and drop.
+async function drop(page: Page, selector: string, setup: (dt: DataTransfer) => void) {
+  const dt = await page.evaluateHandle((src) => {
+    const d = new DataTransfer();
+    new Function('dt', src)(d);
+    return d;
+  }, `(${setup.toString()})(dt)`);
+  await page.dispatchEvent(selector, 'dragover', { dataTransfer: dt });
+  await page.dispatchEvent(selector, 'drop', { dataTransfer: dt });
+}
+
+test('drag and drop moves a file into a folder and back to the root', async ({ page }) => {
+  await page.goto('/');
+  await drop(page, '#tree details[data-dir="api"] > summary', (dt) => dt.setData('application/x-specli-path', 'roles.csv'));
+  await expect(page.locator('#tree a.file[data-path="api/roles.csv"]')).toHaveCount(1);
+  await expect(page.locator('#tree a.file[data-path="roles.csv"]')).toHaveCount(0);
+  await drop(page, '#tree', (dt) => dt.setData('application/x-specli-path', 'api/roles.csv'));
+  await expect(page.locator('#tree a.file[data-path="roles.csv"]')).toHaveCount(1);
+});
+
+test('context menu duplicates, copies/pastes and deletes a file', async ({ page }) => {
+  await page.goto('/');
+  const file = (p: string) => page.locator(`#tree a.file[data-path="${p}"]`);
+  await file('flow.mmd').click({ button: 'right' });
+  await page.getByRole('button', { name: 'Duplicate' }).click();
+  await expect(file('flow copy.mmd')).toHaveCount(1);
+  await file('flow.mmd').click({ button: 'right' });
+  await page.getByRole('button', { name: 'Copy' }).click();
+  await page.locator('#tree details > summary', { hasText: 'api' }).click({ button: 'right' });
+  await page.getByRole('button', { name: /^Paste/ }).click();
+  await expect(file('api/flow.mmd')).toHaveCount(1);
+  await file('flow copy.mmd').click({ button: 'right' });
+  await page.getByRole('button', { name: /^Rename/ }).click();
+  await page.locator('#file-name').fill('flow2.mmd');
+  await page.locator('#file-ok').click();
+  await expect(file('flow2.mmd')).toHaveCount(1);
+  await expect(file('flow copy.mmd')).toHaveCount(0);
+  for (const p of ['flow2.mmd', 'api/flow.mmd']) {
+    await file(p).click({ button: 'right' });
+    await page.getByRole('button', { name: /^Delete/ }).click();
+    await expect(page.locator('#file-name')).toBeHidden();
+    await page.locator('#file-ok').click();
+    await expect(file(p)).toHaveCount(0);
+  }
+});
+
+test('context menu on a folder creates a file or a folder', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#tree details > summary', { hasText: 'api' }).click({ button: 'right' });
+  await page.getByRole('button', { name: 'New file…' }).click();
+  await expect(page.locator('#new-dir')).toHaveValue('api');
+  await page.locator('#new-dlg').getByRole('button', { name: 'Cancel' }).click();
+  await page.dispatchEvent('#tree', 'contextmenu', { clientX: 100, clientY: 100 });
+  await page.getByRole('button', { name: 'New folder…' }).click();
+  await page.locator('#file-name').fill('notes');
+  await page.locator('#file-ok').click();
+  await expect(page.locator('#new-dir')).toHaveValue('notes');
+  await page.locator('#new-dlg').getByRole('button', { name: 'Cancel' }).click();
+});
+
+// Adds a file, so keep it last: other tests count the example files.
+test('dropping a file from the desktop adds it to the specs', async ({ page }) => {
+  await page.goto('/');
+  await drop(page, '#tree', (dt) => dt.items.add(new File(['# Dropped\n'], 'dropped.md', { type: 'text/markdown' })));
+  await expect(page.locator('#tree a.file[data-path="dropped.md"]')).toHaveCount(1);
+  await expect(page.locator('#title')).toHaveText('dropped.md');
+});

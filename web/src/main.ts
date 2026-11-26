@@ -634,6 +634,7 @@ function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
   a.className = 'file' + (doc?.path === f.path ? ' active' : '');
   a.href = hashFor(f.path);
   a.title = f.path;
+  a.dataset.path = f.path;
   const badge = document.createElement('span');
   badge.className = 'badge';
   badge.textContent = kindBadge[f.kind];
@@ -668,6 +669,7 @@ function fileLink(f: FileInfo, label: string): HTMLAnchorElement {
 function renderNode(n: TreeNode, into: HTMLElement) {
   for (const d of [...n.dirs.values()].sort((a, b) => a.name.localeCompare(b.name))) {
     const det = document.createElement('details');
+    det.dataset.dir = d.path;
     det.open = openDirs.has(d.path);
     det.addEventListener('toggle', () => { if (det.open) openDirs.add(d.path); else openDirs.delete(d.path); });
     const sum = document.createElement('summary');
@@ -807,6 +809,260 @@ async function refreshFiles() {
 }
 const refreshFilesSoon = debounce(() => { void refreshFiles(); refreshGitSoon(); }, 300);
 
+// ---------- drag and drop (move files, add files from the desktop) ----------
+
+const DND_TYPE = 'application/x-specli-path';
+let dropEl: HTMLElement | null = null;
+
+// The folder a drop lands in: the folder under the pointer, else the root.
+function dropTarget(e: DragEvent): { dir: string; el: HTMLElement } {
+  const det = (e.target as HTMLElement).closest<HTMLDetailsElement>('#tree details[data-dir]');
+  return det ? { dir: det.dataset.dir!, el: det.querySelector<HTMLElement>(':scope > summary')! } : { dir: '', el: els.tree };
+}
+function clearDrop() { dropEl?.classList.remove('drop'); dropEl = null; }
+
+els.tree.addEventListener('dragstart', (e) => {
+  const a = (e.target as HTMLElement).closest<HTMLAnchorElement>('a.file');
+  if (!a?.dataset.path || info.readonly || !e.dataTransfer) { e.preventDefault(); return; }
+  e.dataTransfer.setData(DND_TYPE, a.dataset.path);
+  e.dataTransfer.effectAllowed = 'move';
+});
+els.tree.addEventListener('dragend', clearDrop);
+els.tree.addEventListener('dragover', (e) => {
+  if (info.readonly || !e.dataTransfer || searching || els.filter.value.trim()) return;
+  const types = [...e.dataTransfer.types];
+  if (!types.includes(DND_TYPE) && !types.includes('Files')) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = types.includes(DND_TYPE) ? 'move' : 'copy';
+  const { el } = dropTarget(e);
+  if (el !== dropEl) { clearDrop(); dropEl = el; el.classList.add('drop'); }
+});
+els.tree.addEventListener('dragleave', (e) => {
+  if (!els.tree.contains(e.relatedTarget as Node | null)) clearDrop();
+});
+els.tree.addEventListener('drop', (e) => {
+  if (info.readonly || !e.dataTransfer) return;
+  e.preventDefault();
+  const { dir } = dropTarget(e);
+  clearDrop();
+  if (dir) openDirs.add(dir);
+  const from = e.dataTransfer.getData(DND_TYPE);
+  if (from) void moveFile(from, dir);
+  else if (e.dataTransfer.files.length) void addFiles([...e.dataTransfer.files], dir);
+});
+
+const joinPath = (dir: string, name: string) => (dir ? dir + '/' + name : name);
+
+const moveFile = (from: string, dir: string) => moveTo(from, joinPath(dir, from.split('/').pop()!));
+
+async function moveTo(from: string, to: string) {
+  if (to === from) return;
+  if (doc?.path === from && isDirty) {
+    showBanner(`Save or discard your changes in ${from} before moving it.`, [], true);
+    return;
+  }
+  const r = await api<{ error?: string }>('/api/move', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!r.ok) { showBanner(`Cannot move ${from}: ${r.data?.error ?? r.status}`, [], true); return; }
+  hideBanner();
+  if (doc?.path === from) location.hash = hashFor(to);
+  await refreshFiles();
+}
+
+async function addFiles(list: File[], dir: string) {
+  const errors: string[] = [];
+  let last = '';
+  for (const f of list) {
+    const path = joinPath(dir, f.name);
+    if (files.some((x) => x.path === path)) { errors.push(`${path} already exists`); continue; }
+    if (f.size > 5 << 20) { errors.push(`${f.name} is too large`); continue; }
+    let content: string;
+    try { content = await f.text(); } catch { errors.push(`Cannot read ${f.name}`); continue; }
+    const eol = content.includes('\r\n') ? 'crlf' : 'lf';
+    const r = await api<{ error?: string }>('/api/file?path=' + enc(path), {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, baseMtime: '', eol }),
+    });
+    if (r.ok) last = path; else errors.push(`${f.name}: ${r.data?.error ?? r.status}`);
+  }
+  if (errors.length) showBanner('Not added: ' + errors.join('; '), [], true); else hideBanner();
+  await refreshFiles();
+  if (last && list.length === 1) location.hash = hashFor(last);
+}
+
+// ---------- context menu (copy, paste, duplicate, delete) ----------
+
+let clipboardPath: string | null = null;
+
+// "a.md" -> "a copy.md" -> "a copy 2.md" ... in the given folder
+function freeName(dir: string, name: string): string {
+  const dot = name.lastIndexOf('.');
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  const ext = dot > 0 ? name.slice(dot) : '';
+  if (!files.some((f) => f.path === joinPath(dir, name))) return joinPath(dir, name);
+  for (let i = 1; ; i++) {
+    const p = joinPath(dir, `${stem} copy${i > 1 ? ' ' + i : ''}${ext}`);
+    if (!files.some((f) => f.path === p)) return p;
+  }
+}
+
+async function copyFile(from: string, dir: string) {
+  const to = freeName(dir, from.split('/').pop()!);
+  const r = await api<{ error?: string }>('/api/copy', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  if (!r.ok) { showBanner(`Cannot copy ${from}: ${r.data?.error ?? r.status}`, [], true); return; }
+  hideBanner();
+  if (dir) openDirs.add(dir);
+  await refreshFiles();
+  location.hash = hashFor(to);
+}
+
+async function deleteFile(path: string) {
+  const r = await api<{ error?: string }>('/api/delete', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path }),
+  });
+  if (!r.ok) { showBanner(`Cannot delete ${path}: ${r.data?.error ?? r.status}`, [], true); return; }
+  hideBanner();
+  if (doc?.path === path) {
+    doc = null;
+    setDirty(false);
+    els.panes.hidden = true;
+    els.empty.hidden = false;
+    els.title.textContent = '';
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  await refreshFiles();
+}
+
+const fileDlg = {
+  dlg: $<HTMLDialogElement>('file-dlg'), form: $<HTMLFormElement>('file-form'), title: $('file-title'), sub: $('file-sub'),
+  renameRow: $('file-rename'), renameLabel: $('file-rename-label'), name: $<HTMLInputElement>('file-name'), msg: $('file-msg'),
+  error: $('file-error'), cancel: $('file-cancel'), ok: $<HTMLButtonElement>('file-ok'),
+};
+let fileDlgSubmit: (() => void) | null = null;
+
+function fileDlgRename(path: string) {
+  const base = path.split('/').pop()!;
+  const dir = path.split('/').slice(0, -1).join('/');
+  fileDlg.title.textContent = 'Rename file';
+  fileDlg.sub.textContent = path;
+  fileDlg.sub.hidden = false;
+  fileDlg.msg.hidden = fileDlg.error.hidden = true;
+  fileDlg.renameRow.hidden = fileDlg.ok.hidden = false;
+  fileDlg.dlg.showModal();
+  fileDlg.ok.textContent = 'Rename';
+  fileDlg.name.value = base;
+  fileDlg.name.focus();
+  fileDlg.name.setSelectionRange(0, base.lastIndexOf('.') > 0 ? base.lastIndexOf('.') : base.length);
+  fileDlgSubmit = () => {
+    const input = fileDlg.name.value.trim();
+    if (!input || input === base) { fileDlg.dlg.close(); return; }
+    if (/[\\/]/.test(input) || input.startsWith('.')) {
+      fileDlg.error.textContent = 'Invalid file name.';
+      fileDlg.error.hidden = false;
+      return;
+    }
+    fileDlg.dlg.close();
+    void moveTo(path, joinPath(dir, input));
+  };
+}
+
+// Folders only exist on disk once they hold a file, so a new folder leads straight into the new-file dialog.
+function fileDlgNewFolder(parent: string) {
+  fileDlg.title.textContent = 'New folder';
+  fileDlg.sub.textContent = parent ? `In ${parent}` : 'In the project root';
+  fileDlg.sub.hidden = false;
+  fileDlg.msg.hidden = fileDlg.error.hidden = true;
+  fileDlg.renameRow.hidden = fileDlg.ok.hidden = false;
+  fileDlg.renameLabel.textContent = 'Folder name';
+  fileDlg.ok.textContent = 'Next';
+  fileDlg.name.value = '';
+  fileDlg.dlg.showModal();
+  fileDlg.name.focus();
+  fileDlgSubmit = () => {
+    const name = fileDlg.name.value.trim();
+    if (!name || /[\\/]/.test(name) || name.startsWith('.') || name === 'node_modules') {
+      fileDlg.error.textContent = 'Invalid folder name.';
+      fileDlg.error.hidden = false;
+      return;
+    }
+    fileDlg.dlg.close();
+    const dir = joinPath(parent, name);
+    if (parent) openDirs.add(parent);
+    openDirs.add(dir);
+    openNewDialog(dir);
+  };
+}
+
+function fileDlgDelete(path: string) {
+  fileDlg.title.textContent = 'Delete file';
+  fileDlg.sub.hidden = true;
+  fileDlg.renameRow.hidden = fileDlg.error.hidden = true;
+  fileDlg.msg.hidden = fileDlg.ok.hidden = false;
+  fileDlg.dlg.showModal();
+  fileDlg.msg.textContent = `Delete ${path}? This cannot be undone.`;
+  fileDlg.ok.textContent = 'Delete';
+  fileDlgSubmit = () => { fileDlg.dlg.close(); void deleteFile(path); };
+}
+
+const menu = document.createElement('div');
+menu.id = 'ctxmenu';
+menu.hidden = true;
+document.body.append(menu);
+const hideMenu = () => { menu.hidden = true; };
+document.addEventListener('click', hideMenu);
+document.addEventListener('scroll', hideMenu, true);
+window.addEventListener('blur', hideMenu);
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape') hideMenu(); });
+
+els.tree.addEventListener('contextmenu', (e) => {
+  if (info.readonly || els.filter.value.trim()) return;
+  const t = e.target as HTMLElement;
+  const file = t.closest<HTMLAnchorElement>('a.file')?.dataset.path ?? null;
+  const det = t.closest<HTMLDetailsElement>('details[data-dir]');
+  const dir = file ? file.split('/').slice(0, -1).join('/') : det?.dataset.dir ?? '';
+  const clip = clipboardPath;
+  const items: ({ label: string; fn: () => void; off?: boolean } | null)[] = [];
+  if (file) {
+    items.push({ label: 'Copy', fn: () => { clipboardPath = file; } });
+    items.push({ label: 'Duplicate', fn: () => void copyFile(file, dir) });
+    items.push({ label: 'Rename…', fn: () => fileDlgRename(file) });
+    items.push(null);
+  }
+  if (!file) {
+    items.push({ label: 'New file…', fn: () => openNewDialog(dir) });
+    items.push({ label: 'New folder…', fn: () => fileDlgNewFolder(dir) });
+    items.push(null);
+  }
+  items.push({
+    label: clip ? `Paste ${clip.split('/').pop()}` : 'Paste',
+    off: !clip || !files.some((f) => f.path === clip),
+    fn: () => { if (clip) void copyFile(clip, dir); },
+  });
+  if (file) items.push(null, { label: 'Delete…', fn: () => fileDlgDelete(file) });
+  e.preventDefault();
+  menu.replaceChildren(...items.map((it) => {
+    if (!it) return document.createElement('hr');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = it.label;
+    b.disabled = !!it.off;
+    b.addEventListener('click', it.fn);
+    return b;
+  }));
+  menu.hidden = false;
+  menu.style.left = Math.max(0, Math.min(e.clientX, window.innerWidth - menu.offsetWidth - 4)) + 'px';
+  menu.style.top = Math.max(0, Math.min(e.clientY, window.innerHeight - menu.offsetHeight - 4)) + 'px';
+});
+fileDlg.cancel.addEventListener('click', () => fileDlg.dlg.close());
+fileDlg.dlg.addEventListener('click', (e) => { if (e.target === fileDlg.dlg) fileDlg.dlg.close(); });
+fileDlg.form.addEventListener('submit', (e) => { e.preventDefault(); fileDlgSubmit?.(); });
+
 // ---------- open / save ----------
 
 async function openFile(path: string) {
@@ -906,7 +1162,7 @@ function selectNewType(t: NewType) {
   }
   updateNewPath();
 }
-function openNewDialog() {
+function openNewDialog(presetDir?: string) {
   newDlg.types.innerHTML = newTypes.map((t) =>
     `<button type="button" role="radio" data-id="${t.id}"><b>${esc(t.label)}</b><span>${esc(t.hint)}</span><code>${esc(t.ext)}</code></button>`).join('');
   const dirs = new Set<string>();
@@ -915,7 +1171,7 @@ function openNewDialog() {
     for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
   }
   newDlg.dirs.innerHTML = [...dirs].sort().map((d) => `<option value="${esc(d)}"></option>`).join('');
-  newDlg.dir.value = doc?.path.includes('/') ? doc.path.replace(/\/[^/]*$/, '') : '';
+  newDlg.dir.value = presetDir ?? (doc?.path.includes('/') ? doc.path.replace(/\/[^/]*$/, '') : '');
   newDlg.name.value = '';
   selectNewType(newTypes[0]);
   newDlg.dlg.showModal();
@@ -938,7 +1194,7 @@ async function createNewFile() {
   await refreshFiles();
   location.hash = hashFor(path);
 }
-els.newBtn.addEventListener('click', openNewDialog);
+els.newBtn.addEventListener('click', () => openNewDialog());
 newDlg.types.addEventListener('click', (e) => {
   const id = (e.target as HTMLElement).closest<HTMLButtonElement>('button')?.dataset.id;
   const t = newTypes.find((x) => x.id === id);

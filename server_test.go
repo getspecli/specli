@@ -192,6 +192,79 @@ func TestCreateFileInNewDirectory(t *testing.T) {
 	}
 }
 
+func TestMoveFile(t *testing.T) {
+	s, root := newTestServer(t, nil)
+	write(t, root, "a.md", "a")
+	write(t, root, "docs/b.md", "b")
+
+	if r := do(s, "POST", "/api/move", `{"from":"a.md","to":"docs/deep/a.md"}`, jsonCT); r.code != 200 {
+		t.Fatalf("move: %d %s", r.code, r.body)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "docs/deep/a.md")); string(b) != "a" {
+		t.Fatalf("moved content: %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(root, "a.md")); !os.IsNotExist(err) {
+		t.Fatal("source still exists")
+	}
+	if r := do(s, "POST", "/api/move", `{"from":"docs/deep/a.md","to":"docs/b.md"}`, jsonCT); r.code != 409 {
+		t.Errorf("existing target: want 409, got %d", r.code)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "docs/b.md")); string(b) != "b" {
+		t.Error("existing file was overwritten")
+	}
+	for _, body := range []string{
+		`{"from":"docs/b.md","to":"../b.md"}`,
+		`{"from":"docs/b.md","to":"docs/b.go"}`,
+		`{"from":"../x.md","to":"x.md"}`,
+	} {
+		if r := do(s, "POST", "/api/move", body, jsonCT); r.code != 400 {
+			t.Errorf("%s: want 400, got %d", body, r.code)
+		}
+	}
+	ro, rroot := newTestServer(t, func(c *config) { c.readonly = true })
+	write(t, rroot, "a.md", "a")
+	if r := do(ro, "POST", "/api/move", `{"from":"a.md","to":"b.md"}`, jsonCT); r.code != 403 {
+		t.Errorf("read-only: want 403, got %d", r.code)
+	}
+}
+
+func TestCopyAndDeleteFile(t *testing.T) {
+	s, root := newTestServer(t, nil)
+	write(t, root, "a.md", "a")
+	if r := do(s, "POST", "/api/copy", `{"from":"a.md","to":"docs/a copy.md"}`, jsonCT); r.code != 200 {
+		t.Fatalf("copy: %d %s", r.code, r.body)
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, "docs/a copy.md")); string(b) != "a" {
+		t.Fatalf("copied content: %q", b)
+	}
+	if r := do(s, "POST", "/api/copy", `{"from":"a.md","to":"docs/a copy.md"}`, jsonCT); r.code != 409 {
+		t.Errorf("existing target: want 409, got %d", r.code)
+	}
+	if r := do(s, "POST", "/api/copy", `{"from":"a.md","to":"../a.md"}`, jsonCT); r.code != 400 {
+		t.Errorf("traversal: want 400, got %d", r.code)
+	}
+	if r := do(s, "POST", "/api/delete", `{"path":"a.md"}`, jsonCT); r.code != 200 {
+		t.Fatalf("delete: %d %s", r.code, r.body)
+	}
+	if _, err := os.Stat(filepath.Join(root, "a.md")); !os.IsNotExist(err) {
+		t.Fatal("file still exists")
+	}
+	if r := do(s, "POST", "/api/delete", `{"path":"a.md"}`, jsonCT); r.code != 404 {
+		t.Errorf("missing: want 404, got %d", r.code)
+	}
+	if r := do(s, "POST", "/api/delete", `{"path":"../x.md"}`, jsonCT); r.code != 400 {
+		t.Errorf("traversal: want 400, got %d", r.code)
+	}
+	ro, rroot := newTestServer(t, func(c *config) { c.readonly = true })
+	write(t, rroot, "a.md", "a")
+	if r := do(ro, "POST", "/api/delete", `{"path":"a.md"}`, jsonCT); r.code != 403 {
+		t.Errorf("read-only delete: want 403, got %d", r.code)
+	}
+	if r := do(ro, "POST", "/api/copy", `{"from":"a.md","to":"b.md"}`, jsonCT); r.code != 403 {
+		t.Errorf("read-only copy: want 403, got %d", r.code)
+	}
+}
+
 func TestWriteGuards(t *testing.T) {
 	s, root := newTestServer(t, nil)
 	write(t, root, "a.md", "a")

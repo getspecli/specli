@@ -57,6 +57,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("/api/git/commit", s.handleGitCommit)
 	mux.HandleFunc("/api/files", s.handleFiles)
 	mux.HandleFunc("/api/file", s.handleFile)
+	mux.HandleFunc("/api/move", s.handleMove)
+	mux.HandleFunc("/api/copy", s.handleCopy)
+	mux.HandleFunc("/api/delete", s.handleDelete)
 	mux.HandleFunc("/api/asset", s.handleAsset)
 	mux.HandleFunc("/api/plantuml", s.handlePlantUML)
 	mux.HandleFunc("/api/search", s.handleSearch)
@@ -230,6 +233,179 @@ func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
 	default:
 		httpErr(w, 405, "method not allowed")
 	}
+}
+
+type moveRequest struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// handleMove renames a spec file inside the root (drag and drop in the sidebar).
+// It never overwrites an existing file.
+func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httpErr(w, 405, "method not allowed")
+		return
+	}
+	if s.cfg.readonly {
+		httpErr(w, 403, "server is read-only")
+		return
+	}
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		httpErr(w, 415, "expected application/json")
+		return
+	}
+	var req moveRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(&req); err != nil {
+		httpErr(w, 400, "invalid body: "+err.Error())
+		return
+	}
+	if kindByExt(req.From) == "" || kindByExt(req.To) == "" {
+		httpErr(w, 400, "unsupported file type")
+		return
+	}
+	from, err := s.resolve(req.From)
+	if err != nil {
+		httpErr(w, 400, err.Error())
+		return
+	}
+	to, err := s.resolve(req.To)
+	if err != nil {
+		httpErr(w, 400, err.Error())
+		return
+	}
+	if st, err := os.Lstat(from); err != nil || !st.Mode().IsRegular() {
+		httpErr(w, 404, "not found")
+		return
+	}
+	if from == to {
+		writeJSON(w, 200, map[string]string{"path": req.To})
+		return
+	}
+	if _, err := os.Lstat(to); err == nil {
+		httpErr(w, http.StatusConflict, "a file with that name already exists in the target folder")
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		httpErr(w, 500, err.Error())
+		return
+	}
+	if err := os.Rename(from, to); err != nil {
+		httpErr(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"path": req.To})
+}
+
+// handleCopy duplicates a spec file (copy/paste and duplicate in the sidebar).
+// It never overwrites an existing file.
+func (s *Server) handleCopy(w http.ResponseWriter, r *http.Request) {
+	var req moveRequest
+	if !s.decodeWrite(w, r, &req) {
+		return
+	}
+	if kindByExt(req.From) == "" || kindByExt(req.To) == "" {
+		httpErr(w, 400, "unsupported file type")
+		return
+	}
+	from, err := s.resolve(req.From)
+	if err != nil {
+		httpErr(w, 400, err.Error())
+		return
+	}
+	to, err := s.resolve(req.To)
+	if err != nil {
+		httpErr(w, 400, err.Error())
+		return
+	}
+	st, err := os.Lstat(from)
+	if err != nil || !st.Mode().IsRegular() {
+		httpErr(w, 404, "not found")
+		return
+	}
+	if st.Size() > maxFileSize {
+		httpErr(w, 413, "file too large")
+		return
+	}
+	b, err := os.ReadFile(from)
+	if err != nil {
+		httpErr(w, 500, err.Error())
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		httpErr(w, 500, err.Error())
+		return
+	}
+	f, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, st.Mode().Perm())
+	if errors.Is(err, os.ErrExist) {
+		httpErr(w, http.StatusConflict, "a file with that name already exists in the target folder")
+		return
+	} else if err != nil {
+		httpErr(w, 500, err.Error())
+		return
+	}
+	_, werr := f.Write(b)
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		os.Remove(to)
+		httpErr(w, 500, werr.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"path": req.To})
+}
+
+type deleteRequest struct {
+	Path string `json:"path"`
+}
+
+// handleDelete removes a single spec file.
+func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
+	var req deleteRequest
+	if !s.decodeWrite(w, r, &req) {
+		return
+	}
+	if kindByExt(req.Path) == "" {
+		httpErr(w, 400, "unsupported file type")
+		return
+	}
+	full, err := s.resolve(req.Path)
+	if err != nil {
+		httpErr(w, 400, err.Error())
+		return
+	}
+	if st, err := os.Lstat(full); err != nil || !st.Mode().IsRegular() {
+		httpErr(w, 404, "not found")
+		return
+	}
+	if err := os.Remove(full); err != nil {
+		httpErr(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"path": req.Path})
+}
+
+// decodeWrite checks method, read-only mode and content type of a mutating
+// JSON request and decodes the body into v. It writes the error response itself.
+func (s *Server) decodeWrite(w http.ResponseWriter, r *http.Request, v any) bool {
+	if r.Method != http.MethodPost {
+		httpErr(w, 405, "method not allowed")
+		return false
+	}
+	if s.cfg.readonly {
+		httpErr(w, 403, "server is read-only")
+		return false
+	}
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+		httpErr(w, 415, "expected application/json")
+		return false
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4096)).Decode(v); err != nil {
+		httpErr(w, 400, "invalid body: "+err.Error())
+		return false
+	}
+	return true
 }
 
 func (s *Server) readFile(w http.ResponseWriter, rel, full string) {

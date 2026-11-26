@@ -62,6 +62,21 @@
       </div>
     </form>
   </dialog>
+  <dialog id="file-dlg" aria-labelledby="file-title">
+    <form method="dialog" id="file-form" autocomplete="off">
+      <h2 id="file-title"></h2>
+      <p class="nd-path" id="file-sub"></p>
+      <label class="nd-field" id="file-rename" hidden><span id="file-rename-label">New name</span>
+        <input id="file-name" spellcheck="false" />
+      </label>
+      <p class="nd-path" id="file-msg" hidden></p>
+      <p class="nd-error" id="file-error" hidden></p>
+      <div class="nd-actions">
+        <button type="button" id="file-cancel">Cancel</button>
+        <button type="submit" class="primary" id="file-ok" hidden></button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="git-dlg" aria-labelledby="git-title">
     <form method="dialog" id="git-form" autocomplete="off">
       <h2 id="git-title">Changes <span id="git-branch"></span></h2>
