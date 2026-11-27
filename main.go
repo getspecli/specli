@@ -47,7 +47,6 @@ const usage = `specli - browser viewer/editor for spec-driven design artifacts
 Usage:
   specli [directory] [options]
   specli lint [directory] [--format text|json|github]   check the specs, exit 1 on findings (CI, hooks)
-  specli bundle <file.md> [--depth N] [--out FILE]      one document: a spec plus the specs it links to
 
 Options:
   --port N               Port to listen on (default 4747, next free port if busy; 0 = random)

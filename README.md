@@ -30,7 +30,7 @@ One self-contained binary, nothing else to install.
     require-sections:
       "specs/**": [Goal, Acceptance Criteria]
   ```
-- **CLI for CI and agents:** `specli lint [dir] [--format text|json|github]` exits 1 on findings; `specli bundle <file.md> [--depth N] [--out FILE]` joins a spec and the specs it links to into one document for an agent prompt.
+- **CLI for CI and agents:** `specli lint [dir] [--format text|json|github]` exits 1 on findings.
 - **Live reload:** external edits (git pull, your IDE, an AI agent) show up within about 1.5 s.
 - **Safe saving:** writes are atomic, concurrent changes on disk are detected, CRLF line endings are preserved.
 - **Local only:** binds to `127.0.0.1`, paths are confined to the served directory, and diagrams are rendered in the
