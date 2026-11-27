@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0
 - Moving or renaming a file in the sidebar now rewrites the relative links in other Markdown files that point to it, and the relative links inside the moved file. Copying a file into another folder keeps its links working. Links in code blocks and inline code, external URLs and anchors are left alone.
 - `specli lint [directory] [--format text|json|github]` checks the specs without starting the server and exits 1 on findings, for CI and pre-commit hooks. `github` prints workflow annotations.
 - Lint rules are configurable in `.specli.yml` in the served folder: `disable` rules, custom `placeholders`, `ignore` globs and `require-sections` per path glob (new rule `missing-section`). Changes apply without a restart.
